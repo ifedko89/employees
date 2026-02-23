@@ -89,6 +89,16 @@ def edit(employee_id):
     return render_template("form.html", action="edit", employee=employee)
 
 
+@app.route("/history/<int:employee_id>")
+def history(employee_id):
+    employee = database.get_by_id(employee_id)
+    if employee is None:
+        flash("Сотрудник не найден.", "error")
+        return redirect(url_for("index"))
+    records = database.get_history(employee_id)
+    return render_template("history.html", employee=employee, records=records)
+
+
 @app.route("/delete/<int:employee_id>", methods=["POST"])
 def delete(employee_id):
     employee = database.get_by_id(employee_id)

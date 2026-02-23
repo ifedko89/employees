@@ -8,6 +8,12 @@
         <h5 class="mb-0">
           {% if action == "edit" %}Редактировать сотрудника{% else %}Новый сотрудник{% endif %}
         </h5>
+        {% if action == "edit" and employee %}
+          <small class="opacity-75">
+            {% if employee.created_at %}Создан: <time datetime="{{ employee.created_at }}">{{ employee.created_at }}</time>&emsp;{% endif %}
+            {% if employee.updated_at %}Изменён: <time datetime="{{ employee.updated_at }}">{{ employee.updated_at }}</time>{% endif %}
+          </small>
+        {% endif %}
       </div>
       <div class="card-body">
         <form method="post" novalidate>
