@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+
+{# Вспомогательный макрос: строит URL для сортировки по колонке #}
+{% macro sort_url(col) %}
+  /?q={{ query | urlencode }}&dept={{ dept | urlencode }}&sort={{ col }}&order={% if sort == col and order == 'asc' %}desc{% else %}asc{% endif %}
+{%- endmacro %}
+
+{% macro sort_icon(col) %}
+  {% if sort == col %}
+    {% if order == 'asc' %}↑{% else %}↓{% endif %}
+  {% endif %}
+{%- endmacro %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h5 class="mb-0">
+    Список сотрудников
+    {% if employees %}
+      <span class="badge bg-secondary">{{ employees | length }}</span>
+    {% endif %}
+  </h5>
+
+  <form class="d-flex flex-wrap gap-2 align-items-center" method="get">
+    {# Скрытые поля, чтобы не терять сортировку при поиске #}
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="order" value="{{ order }}">
+
+    <input class="form-control form-control-sm" name="q"
+           placeholder="Поиск по имени, должности, отделу…"
+           value="{{ query }}" style="min-width: 220px">
+
+    {% if departments %}
+    <select class="form-select form-select-sm" name="dept" style="min-width: 150px"
+            onchange="this.form.submit()">
+      <option value="">Все отделы</option>
+      {% for d in departments %}
+        <option value="{{ d }}" {% if dept == d %}selected{% endif %}>{{ d }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+
+    <button class="btn btn-outline-secondary btn-sm">Найти</button>
+    {% if query or dept %}
+      <a href="/" class="btn btn-outline-danger btn-sm" title="Сбросить фильтры">✕</a>
+    {% endif %}
+  </form>
+</div>
+
+{% if employees %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-striped table-hover mb-0 align-middle">
+      <thead class="table-primary">
+        <tr>
+          <th><a href="{{ sort_url('full_name') }}" class="text-decoration-none text-dark">ФИО {{ sort_icon('full_name') }}</a></th>
+          <th><a href="{{ sort_url('position') }}" class="text-decoration-none text-dark">Должность {{ sort_icon('position') }}</a></th>
+          <th><a href="{{ sort_url('department') }}" class="text-decoration-none text-dark">Отдел {{ sort_icon('department') }}</a></th>
+          <th>Email</th>
+          <th>Телефон</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td class="fw-semibold">{{ e.full_name }}</td>
+          <td>{{ e.position }}</td>
+          <td><span class="badge bg-primary bg-opacity-75">{{ e.department }}</span></td>
+          <td>{{ e.email or '—' }}</td>
+          <td>{{ e.phone or '—' }}</td>
+          <td class="text-end text-nowrap">
+            <a href="/edit/{{ e.id }}" class="btn btn-sm btn-outline-primary me-1">Изменить</a>
+            <form method="post" action="/delete/{{ e.id }}" class="d-inline"
+                  onsubmit="return confirm('Удалить сотрудника «{{ e.full_name }}»?')">
+              <button class="btn btn-sm btn-outline-danger">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  {% if query or dept %}
+    <p>По заданным фильтрам ничего не найдено.</p>
+    <a href="/" class="btn btn-outline-secondary btn-sm">Показать всех</a>
+  {% else %}
+    <p>Сотрудников пока нет.</p>
+    <a href="/create" class="btn btn-primary">Добавить первого</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

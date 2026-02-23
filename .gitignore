@@ -1,0 +1,35 @@
+# Переменные окружения
+.env
+.env.*
+!.env.example
+
+# Claude Code
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Allure
+allure-results/
+allure-report/
+allure-report-classic/
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
