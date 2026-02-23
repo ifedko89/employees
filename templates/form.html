@@ -23,6 +23,7 @@
               ФИО <span class="text-danger">*</span>
             </label>
             <input class="form-control" name="full_name" required autofocus
+                   minlength="3" maxlength="50"
                    placeholder="Иванов Иван Иванович"
                    value="{{ employee.full_name if employee else '' }}">
           </div>
@@ -32,6 +33,7 @@
               Должность <span class="text-danger">*</span>
             </label>
             <input class="form-control" name="position" required
+                   minlength="3" maxlength="50"
                    placeholder="Инженер-программист"
                    value="{{ employee.position if employee else '' }}">
           </div>
@@ -41,6 +43,7 @@
               Отдел <span class="text-danger">*</span>
             </label>
             <input class="form-control" name="department" required
+                   minlength="3" maxlength="50"
                    placeholder="Разработка"
                    value="{{ employee.department if employee else '' }}">
           </div>
