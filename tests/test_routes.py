@@ -33,12 +33,12 @@ def test_index_shows_employees(client, make_employee):
 @allure.severity(allure.severity_level.NORMAL)
 @pytest.mark.parametrize("url,present,absent", [
     ("/?q=Иван", "Иван Иванов", "Пётр Петров"),
-    ("/?dept=ИТ", "Иван Иванов", "Пётр Петров"),
+    ("/?dept=ИТ-отдел", "Иван Иванов", "Пётр Петров"),
 ])
 def test_index_filter(client, make_employee, url, present, absent):
     with allure.step("Создать двух сотрудников из разных отделов"):
-        make_employee("Иван Иванов", "Разработчик", "ИТ")
-        make_employee("Пётр Петров", "Менеджер", "HR")
+        make_employee("Иван Иванов", "Разработчик", "ИТ-отдел")
+        make_employee("Пётр Петров", "Менеджер", "Кадры")
     with allure.step(f"GET {url}"):
         resp = client.get(url)
         data = resp.data.decode()
@@ -67,7 +67,7 @@ def test_create_post_valid(client):
         resp = client.post("/create", data={
             "full_name": "Иван Иванов",
             "position": "Разработчик",
-            "department": "ИТ",
+            "department": "ИТ-отдел",
             "email": "ivanov@apple.com",
             "phone": "",
         })
@@ -83,15 +83,15 @@ def test_create_post_valid(client):
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("data,expected_text", [
     (
-        {"full_name": "", "position": "Разработчик", "department": "ИТ", "email": "testerov@tester.fv", "phone": ""},
+        {"full_name": "", "position": "Разработчик", "department": "ИТ-отдел", "email": "testerov@tester.fv", "phone": ""},
         "обязательные",
     ),
     (
-        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ", "email": "not-an-email", "phone": ""},
+        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "not-an-email", "phone": ""},
         "почт",
     ),
     (
-        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ", "email": "testerov@tester.fv", "phone": "abc"},
+        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "testerov@tester.fv", "phone": "abc"},
         "телефон",
     ),
 ])
@@ -139,7 +139,7 @@ def test_edit_post_valid(client, make_employee):
         resp = client.post(f"/edit/{emp['id']}", data={
             "full_name": "Пётр Петров",
             "position": "Менеджер",
-            "department": "HR",
+            "department": "Кадры",
             "email": "new@email.com",
             "phone": "",
         })
@@ -155,15 +155,15 @@ def test_edit_post_valid(client, make_employee):
 @allure.severity(allure.severity_level.CRITICAL)
 @pytest.mark.parametrize("data,expected_text", [
     (
-        {"full_name": "", "position": "Менеджер", "department": "HR", "email": "manager@ozon.ru", "phone": ""},
+        {"full_name": "", "position": "Менеджер", "department": "Кадры", "email": "manager@ozon.ru", "phone": ""},
         "обязательные",
     ),
     (
-        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ", "email": "bad@fgbf", "phone": ""},
+        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "bad@fgbf", "phone": ""},
         "почт",
     ),
     (
-        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ", "email": "ivanov@rtk.com", "phone": "abc"},
+        {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "ivanov@rtk.com", "phone": "abc"},
         "телефон",
     ),
 ])
@@ -213,7 +213,7 @@ def test_create_duplicate_email(client):
         resp = client.post("/create", data={
             "full_name": "Иван Иванов",
             "position": "Разработчик",
-            "department": "ИТ",
+            "department": "ИТ-отдел",
             "email": email,
             "phone": "",
         })
@@ -223,7 +223,7 @@ def test_create_duplicate_email(client):
         resp = client.post("/create", data={
             "full_name": "Другой Человек",
             "position": "Менеджер",
-            "department": "HR",
+            "department": "Кадры",
             "email": email,
             "phone": "",
         })
