@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set field_labels = {
+    'full_name': 'ФИО',
+    'position': 'Должность',
+    'department': 'Отдел',
+    'email': 'Email',
+    'phone': 'Телефон'
+} %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">История изменений: {{ employee.full_name }}</h5>
+  <a href="/" class="btn btn-outline-secondary btn-sm">← Назад</a>
+</div>
+
+{% if records %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-striped table-hover mb-0 align-middle">
+      <thead class="table-primary">
+        <tr>
+          <th>Дата/время</th>
+          <th>Тип</th>
+          <th>Поле</th>
+          <th>Старое значение</th>
+          <th>Новое значение</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td class="text-nowrap"><time datetime="{{ r.changed_at }}">{{ r.changed_at }}</time></td>
+          <td>
+            {% if r.change_type == 'create' %}
+              <span class="badge bg-success">Создание</span>
+            {% else %}
+              <span class="badge bg-warning text-dark">Изменение</span>
+            {% endif %}
+          </td>
+          <td>{{ field_labels.get(r.field_name, r.field_name) if r.field_name else '—' }}</td>
+          <td>{{ r.old_value or '—' }}</td>
+          <td>{{ r.new_value or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <p>История изменений отсутствует.</p>
+</div>
+{% endif %}
+
+{% endblock %}

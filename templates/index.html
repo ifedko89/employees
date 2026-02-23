@@ -70,6 +70,7 @@
           <td>{{ e.phone or '—' }}</td>
           <td class="text-end text-nowrap">
             <a href="/edit/{{ e.id }}" class="btn btn-sm btn-outline-primary me-1">Изменить</a>
+            <a href="/history/{{ e.id }}" class="btn btn-sm btn-outline-secondary me-1">История</a>
             <form method="post" action="/delete/{{ e.id }}" class="d-inline"
                   onsubmit="return confirm('Удалить сотрудника «{{ e.full_name }}»?')">
               <button class="btn btn-sm btn-outline-danger">Удалить</button>
