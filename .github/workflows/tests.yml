@@ -9,6 +9,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    permissions:
+      checks: write
+      pull-requests: write
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +41,7 @@ jobs:
           name: allure-results
           path: allure-results
 
-      - uses: simple-elf/allure-report-action@v1
+      - uses: simple-elf/allure-report-action@v2
         if: always()
         with:
           allure_results: allure-results
