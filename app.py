@@ -10,6 +10,9 @@ PHONE_RE = re.compile(r"^\+?[\d\s\-()]{7,20}$")
 def validate_form(full_name, position, department, email, phone):
     if not full_name or not position or not department or not email:
         return "ФИО, должность, отдел и email — обязательные поля."
+    for field, label in ((full_name, "ФИО"), (position, "Должность"), (department, "Отдел")):
+        if not (3 <= len(field) <= 50):
+            return f"{label} должно содержать от 3 до 50 символов."
     if not EMAIL_RE.match(email):
         return "Некорректный адрес электронной почты."
     if phone and not PHONE_RE.match(phone):
