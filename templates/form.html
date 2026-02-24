@@ -32,20 +32,30 @@
             <label class="form-label">
               Должность <span class="text-danger">*</span>
             </label>
-            <input class="form-control" name="position" required
-                   minlength="3" maxlength="50"
-                   placeholder="Инженер-программист"
-                   value="{{ employee.position if employee else '' }}">
+            <select class="form-select" name="position" required>
+              <option value="">— Выберите должность —</option>
+              {% for p in positions %}
+                <option value="{{ p.name }}"
+                        {% if employee and employee.position == p.name %}selected{% endif %}>
+                  {{ p.name }}
+                </option>
+              {% endfor %}
+            </select>
           </div>
 
           <div class="mb-3">
             <label class="form-label">
               Отдел <span class="text-danger">*</span>
             </label>
-            <input class="form-control" name="department" required
-                   minlength="3" maxlength="50"
-                   placeholder="Разработка"
-                   value="{{ employee.department if employee else '' }}">
+            <select class="form-select" name="department" required>
+              <option value="">— Выберите отдел —</option>
+              {% for d in departments %}
+                <option value="{{ d.name }}"
+                        {% if employee and employee.department == d.name %}selected{% endif %}>
+                  {{ d.name }}
+                </option>
+              {% endfor %}
+            </select>
           </div>
 
           <div class="mb-3">

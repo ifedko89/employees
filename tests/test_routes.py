@@ -203,6 +203,202 @@ def test_delete_nonexistent(client):
 
 
 @allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("GET /positions — страница открывается")
+@allure.severity(allure.severity_level.NORMAL)
+def test_positions_get(client):
+    with allure.step("GET /positions"):
+        resp = client.get("/positions")
+    with allure.step("Ответ 200"):
+        assert resp.status_code == 200
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("POST /positions/create — создаёт должность и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_positions_create(client):
+    with allure.step("POST /positions/create с валидным именем"):
+        resp = client.post("/positions/create", data={"name": "Разработчик"})
+    with allure.step("Редирект 302"):
+        assert resp.status_code == 302
+    with allure.step("Запись появилась в БД"):
+        names = [r["name"] for r in database.get_all_positions()]
+        assert "Разработчик" in names
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("POST /positions/create — дубликат → flash-ошибка")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_positions_create_duplicate(client):
+    with allure.step("Создать должность первый раз"):
+        client.post("/positions/create", data={"name": "Менеджер"})
+    with allure.step("Попытаться создать дубль"):
+        resp = client.post("/positions/create", data={"name": "Менеджер"},
+                           follow_redirects=True)
+    with allure.step("Flash-ошибка в ответе"):
+        assert "уже существует" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("POST /positions/create — пустое имя → flash-ошибка")
+@allure.severity(allure.severity_level.NORMAL)
+def test_positions_create_empty_name(client):
+    with allure.step("POST с пустым именем"):
+        resp = client.post("/positions/create", data={"name": ""},
+                           follow_redirects=True)
+    with allure.step("Flash-ошибка в ответе"):
+        assert "пустым" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("GET /positions?edit=<id> — форма предзаполнена")
+@allure.severity(allure.severity_level.NORMAL)
+def test_positions_get_edit_prefilled(client):
+    with allure.step("Создать должность"):
+        database.create_position("Аналитик")
+        pos = database.get_all_positions()[0]
+    with allure.step(f"GET /positions?edit={pos['id']}"):
+        resp = client.get(f"/positions?edit={pos['id']}")
+    with allure.step("Ответ 200, название в HTML"):
+        assert resp.status_code == 200
+        assert "Аналитик" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("POST /positions/<id>/edit — обновляет и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_positions_edit(client):
+    with allure.step("Создать должность"):
+        database.create_position("Стажёр")
+        pos = database.get_all_positions()[0]
+    with allure.step("POST edit"):
+        resp = client.post(f"/positions/{pos['id']}/edit", data={"name": "Специалист"})
+    with allure.step("Редирект 302"):
+        assert resp.status_code == 302
+    with allure.step("Название обновлено в БД"):
+        updated = database.get_position_by_id(pos["id"])
+        assert updated["name"] == "Специалист"
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник должностей")
+@allure.title("POST /positions/<id>/delete — удаляет и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_positions_delete(client):
+    with allure.step("Создать должность"):
+        database.create_position("Временная")
+        pos = database.get_all_positions()[0]
+    with allure.step("POST delete"):
+        resp = client.post(f"/positions/{pos['id']}/delete")
+    with allure.step("Редирект 302, запись удалена"):
+        assert resp.status_code == 302
+        assert database.get_position_by_id(pos["id"]) is None
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник отделов")
+@allure.title("GET /departments — страница открывается")
+@allure.severity(allure.severity_level.NORMAL)
+def test_departments_get(client):
+    with allure.step("GET /departments"):
+        resp = client.get("/departments")
+    with allure.step("Ответ 200"):
+        assert resp.status_code == 200
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник отделов")
+@allure.title("POST /departments/create — создаёт отдел и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_departments_create(client):
+    with allure.step("POST /departments/create"):
+        resp = client.post("/departments/create", data={"name": "ИТ-отдел"})
+    with allure.step("Редирект 302"):
+        assert resp.status_code == 302
+    with allure.step("Запись появилась в БД"):
+        names = [r["name"] for r in database.get_all_departments()]
+        assert "ИТ-отдел" in names
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник отделов")
+@allure.title("POST /departments/create — дубликат → flash-ошибка")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_departments_create_duplicate(client):
+    with allure.step("Создать отдел"):
+        client.post("/departments/create", data={"name": "Кадры"})
+    with allure.step("Попытаться создать дубль"):
+        resp = client.post("/departments/create", data={"name": "Кадры"},
+                           follow_redirects=True)
+    with allure.step("Flash-ошибка в ответе"):
+        assert "уже существует" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник отделов")
+@allure.title("POST /departments/<id>/edit — обновляет и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_departments_edit(client):
+    with allure.step("Создать отдел"):
+        database.create_department("Бухгалтерия")
+        dept = database.get_all_departments()[0]
+    with allure.step("POST edit"):
+        resp = client.post(f"/departments/{dept['id']}/edit", data={"name": "Финансы"})
+    with allure.step("Редирект 302"):
+        assert resp.status_code == 302
+    with allure.step("Название обновлено в БД"):
+        updated = database.get_department_by_id(dept["id"])
+        assert updated["name"] == "Финансы"
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Справочник отделов")
+@allure.title("POST /departments/<id>/delete — удаляет и редиректит")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_departments_delete(client):
+    with allure.step("Создать отдел"):
+        database.create_department("Временный")
+        dept = database.get_all_departments()[0]
+    with allure.step("POST delete"):
+        resp = client.post(f"/departments/{dept['id']}/delete")
+    with allure.step("Редирект 302, запись удалена"):
+        assert resp.status_code == 302
+        assert database.get_department_by_id(dept["id"]) is None
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Интеграция")
+@allure.title("GET /create содержит должности из справочника")
+@allure.severity(allure.severity_level.NORMAL)
+def test_create_form_has_positions(client):
+    with allure.step("Добавить должность в справочник"):
+        database.create_position("DevOps-инженер")
+    with allure.step("GET /create"):
+        resp = client.get("/create")
+    with allure.step("Должность присутствует в HTML как option"):
+        assert "DevOps-инженер" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Интеграция")
+@allure.title("GET /edit предзаполняет select должности")
+@allure.severity(allure.severity_level.NORMAL)
+def test_edit_form_preselects_position(client, make_employee):
+    with allure.step("Создать должность в справочнике и сотрудника с ней"):
+        database.create_position("Архитектор")
+        emp = make_employee("Иван Иванов", "Архитектор", "ИТ")
+    with allure.step(f"GET /edit/{emp['id']}"):
+        resp = client.get(f"/edit/{emp['id']}")
+    with allure.step("selected в HTML содержит должность"):
+        assert "Архитектор" in resp.data.decode()
+
+
+@allure.feature("HTTP-маршруты")
 @allure.story("Идемпотентность")
 @allure.title("Повторное создание сотрудника с тем же email невозможно")
 @allure.severity(allure.severity_level.CRITICAL)

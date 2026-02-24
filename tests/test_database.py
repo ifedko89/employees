@@ -132,12 +132,177 @@ def test_get_all_invalid_sort(make_employee):
 @allure.story("Справочники")
 @allure.title("Получение уникальных отделов в алфавитном порядке")
 @allure.severity(allure.severity_level.NORMAL)
-def test_get_departments(make_employee):
-    with allure.step("Создать сотрудников из двух отделов (ИТ дважды)"):
-        make_employee("Иван Иванов", "Разработчик", "ИТ")
-        make_employee("Пётр Петров", "Менеджер", "HR")
-        make_employee("Анна Аннова", "Дизайнер", "ИТ")
+def test_get_departments():
+    with allure.step("Создать отделы напрямую в справочнике"):
+        database.create_department("ИТ")
+        database.create_department("HR")
     with allure.step("Получить список отделов"):
         depts = database.get_departments()
     with allure.step("Проверить уникальность и порядок"):
         assert depts == ["HR", "ИТ"]
+
+
+# --- Positions ---
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Создание должности и получение всех")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_position_create_and_get_all():
+    with allure.step("Создать две должности"):
+        database.create_position("Разработчик")
+        database.create_position("Менеджер")
+    with allure.step("Получить все должности"):
+        items = database.get_all_positions()
+    with allure.step("Проверить наличие обеих должностей"):
+        names = [r["name"] for r in items]
+        assert "Разработчик" in names
+        assert "Менеджер" in names
+
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Получение должности по ID")
+@allure.severity(allure.severity_level.NORMAL)
+def test_position_get_by_id():
+    with allure.step("Создать должность"):
+        database.create_position("Аналитик")
+    with allure.step("Получить все и взять первую"):
+        items = database.get_all_positions()
+        pos_id = items[0]["id"]
+    with allure.step("Получить по ID"):
+        pos = database.get_position_by_id(pos_id)
+        assert pos is not None
+        assert pos["name"] == "Аналитик"
+
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Обновление должности")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_position_update():
+    with allure.step("Создать должность"):
+        database.create_position("Тестировщик")
+        items = database.get_all_positions()
+        pos_id = items[0]["id"]
+    with allure.step("Обновить название"):
+        database.update_position(pos_id, "QA-инженер")
+    with allure.step("Проверить изменение"):
+        pos = database.get_position_by_id(pos_id)
+        assert pos["name"] == "QA-инженер"
+
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Удаление должности")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_position_delete():
+    with allure.step("Создать должность"):
+        database.create_position("Стажёр")
+        items = database.get_all_positions()
+        pos_id = items[0]["id"]
+    with allure.step("Удалить должность"):
+        database.delete_position(pos_id)
+    with allure.step("Убедиться что не существует"):
+        assert database.get_position_by_id(pos_id) is None
+
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Дублирующее название должности вызывает IntegrityError")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_position_duplicate_raises():
+    with allure.step("Создать должность"):
+        database.create_position("Архитектор")
+    with allure.step("Попытаться создать дубль"):
+        with pytest.raises(Exception):
+            database.create_position("Архитектор")
+
+
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Миграция должностей из существующих сотрудников")
+@allure.severity(allure.severity_level.NORMAL)
+def test_position_migration_from_employees(make_employee):
+    with allure.step("Создать сотрудника с должностью"):
+        make_employee("Иван Иванов", "DevOps-инженер", "ИТ")
+    with allure.step("Переинициализировать БД (должна подтянуть должность)"):
+        database.init_db()
+    with allure.step("Должность должна быть в справочнике"):
+        names = [r["name"] for r in database.get_all_positions()]
+        assert "DevOps-инженер" in names
+
+
+# --- Departments ---
+
+@allure.feature("База данных")
+@allure.story("Справочник отделов")
+@allure.title("Создание отдела и получение всех")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_department_create_and_get_all():
+    with allure.step("Создать два отдела"):
+        database.create_department("Разработка")
+        database.create_department("Маркетинг")
+    with allure.step("Получить все отделы"):
+        items = database.get_all_departments()
+    with allure.step("Проверить наличие обоих отделов"):
+        names = [r["name"] for r in items]
+        assert "Разработка" in names
+        assert "Маркетинг" in names
+
+
+@allure.feature("База данных")
+@allure.story("Справочник отделов")
+@allure.title("Обновление отдела")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_department_update():
+    with allure.step("Создать отдел"):
+        database.create_department("Кадры")
+        items = database.get_all_departments()
+        dept_id = items[0]["id"]
+    with allure.step("Обновить название"):
+        database.update_department(dept_id, "HR")
+    with allure.step("Проверить изменение"):
+        dept = database.get_department_by_id(dept_id)
+        assert dept["name"] == "HR"
+
+
+@allure.feature("База данных")
+@allure.story("Справочник отделов")
+@allure.title("Удаление отдела")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_department_delete():
+    with allure.step("Создать отдел"):
+        database.create_department("Временный")
+        items = database.get_all_departments()
+        dept_id = items[0]["id"]
+    with allure.step("Удалить отдел"):
+        database.delete_department(dept_id)
+    with allure.step("Убедиться что не существует"):
+        assert database.get_department_by_id(dept_id) is None
+
+
+@allure.feature("База данных")
+@allure.story("Справочник отделов")
+@allure.title("Дублирующее название отдела вызывает IntegrityError")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_department_duplicate_raises():
+    with allure.step("Создать отдел"):
+        database.create_department("Бухгалтерия")
+    with allure.step("Попытаться создать дубль"):
+        with pytest.raises(Exception):
+            database.create_department("Бухгалтерия")
+
+
+@allure.feature("База данных")
+@allure.story("Справочник отделов")
+@allure.title("get_departments читает из таблицы departments")
+@allure.severity(allure.severity_level.NORMAL)
+def test_get_departments_from_table():
+    with allure.step("Создать отделы в таблице departments"):
+        database.create_department("Финансы")
+        database.create_department("Юридический")
+    with allure.step("get_departments возвращает их"):
+        depts = database.get_departments()
+        assert "Финансы" in depts
+        assert "Юридический" in depts
