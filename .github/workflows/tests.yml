@@ -54,7 +54,7 @@ jobs:
 
       - name: Remove .git from allure-history
         if: always()
-        run: rm -rf allure-history/.git
+        run: sudo rm -rf allure-history/.git
 
       - name: Deploy report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
