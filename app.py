@@ -1,7 +1,11 @@
+import os
 import re
-import sqlite3
+
+import grpc
 from flask import Flask, render_template, request, redirect, url_for, flash
-import database
+
+import employees_pb2
+import employees_pb2_grpc
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^\+?[\d\s\-()]{7,20}$")
@@ -16,21 +20,63 @@ def validate_reference_name(name: str):
 
 
 def validate_form(full_name, position, department, email, phone):
-    if not full_name or not position or not department or not email:
-        return "ФИО, должность, отдел и email — обязательные поля."
-    for field, label in ((full_name, "ФИО"), (position, "Должность"), (department, "Отдел")):
-        if not (3 <= len(field) <= 50):
-            return f"{label} должно содержать от 3 до 50 символов."
-    if not EMAIL_RE.match(email):
-        return "Некорректный адрес электронной почты."
+    errors = {}
+    if not full_name:
+        errors["full_name"] = "Обязательное поле."
+    elif not (3 <= len(full_name) <= 50):
+        errors["full_name"] = "От 3 до 50 символов."
+    if not position:
+        errors["position"] = "Обязательное поле."
+    if not department:
+        errors["department"] = "Обязательное поле."
+    if not email:
+        errors["email"] = "Обязательное поле."
+    elif not EMAIL_RE.match(email):
+        errors["email"] = "Некорректный адрес электронной почты."
     if phone and not PHONE_RE.match(phone):
-        return "Некорректный номер телефона."
-    return None
+        errors["phone"] = "Некорректный номер телефона."
+    return errors
+
 
 app = Flask(__name__)
 app.secret_key = "dev-secret-key-change-in-production"
 
-database.init_db()
+GRPC_HOST = os.environ.get("GRPC_HOST", "localhost:50051")
+channel = grpc.insecure_channel(GRPC_HOST)
+stub = employees_pb2_grpc.EmployeesServiceStub(channel)
+
+
+def _emp_to_dict(emp):
+    return {
+        "id": emp.id,
+        "full_name": emp.full_name,
+        "position": emp.position,
+        "department": emp.department,
+        "email": emp.email,
+        "phone": emp.phone,
+        "created_at": emp.created_at,
+        "updated_at": emp.updated_at,
+    }
+
+
+def _history_to_dict(rec):
+    return {
+        "id": rec.id,
+        "employee_id": rec.employee_id,
+        "changed_at": rec.changed_at,
+        "change_type": rec.change_type,
+        "field_name": rec.field_name,
+        "old_value": rec.old_value,
+        "new_value": rec.new_value,
+    }
+
+
+def _dept_to_dict(dept):
+    return {"id": dept.id, "name": dept.name}
+
+
+def _pos_to_dict(pos):
+    return {"id": pos.id, "name": pos.name}
 
 
 @app.route("/")
@@ -39,8 +85,12 @@ def index():
     sort = request.args.get("sort", "full_name")
     order = request.args.get("order", "asc")
     dept = request.args.get("dept", "")
-    employees = database.get_all(search=query, sort=sort, order=order, dept=dept)
-    departments = database.get_departments()
+    resp = stub.ListEmployees(employees_pb2.ListEmployeesRequest(
+        search=query, sort=sort, order=order, dept=dept,
+    ))
+    employees = [_emp_to_dict(e) for e in resp.employees]
+    dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
+    departments = [d.name for d in dept_resp.departments]
     return render_template(
         "index.html",
         employees=employees, query=query,
@@ -51,8 +101,13 @@ def index():
 
 @app.route("/create", methods=["GET", "POST"])
 def create():
-    positions = database.get_all_positions()
-    departments = database.get_all_departments()
+    pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
+    positions = [_pos_to_dict(p) for p in pos_resp.positions]
+    dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
+    departments = [_dept_to_dict(d) for d in dept_resp.departments]
+
+    form_data = {}
+    errors = {}
 
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
@@ -61,30 +116,41 @@ def create():
         email = request.form.get("email", "").strip()
         phone = request.form.get("phone", "").strip()
 
-        error = validate_form(full_name, position, department, email, phone)
-        if error:
-            flash(error, "error")
-        else:
-            try:
-                database.create(full_name, position, department, email, phone)
+        form_data = dict(full_name=full_name, position=position,
+                         department=department, email=email, phone=phone)
+        errors = validate_form(full_name, position, department, email, phone)
+
+        if not errors:
+            result = stub.CreateEmployee(employees_pb2.CreateEmployeeRequest(
+                full_name=full_name, position=position, department=department,
+                email=email, phone=phone,
+            ))
+            if result.success:
                 flash(f"Сотрудник «{full_name}» добавлен.", "success")
                 return redirect(url_for("index"))
-            except sqlite3.IntegrityError:
-                flash("Сотрудник с таким email уже существует.", "error")
+            elif result.error == "duplicate_email":
+                errors["email"] = "Сотрудник с таким email уже существует."
 
     return render_template("form.html", action="create", employee=None,
-                           positions=positions, departments=departments)
+                           positions=positions, departments=departments,
+                           form_data=form_data, errors=errors)
 
 
 @app.route("/edit/<int:employee_id>", methods=["GET", "POST"])
 def edit(employee_id):
-    employee = database.get_by_id(employee_id)
-    if employee is None:
+    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    if not emp_resp.found:
         flash("Сотрудник не найден.", "error")
         return redirect(url_for("index"))
+    employee = _emp_to_dict(emp_resp.employee)
 
-    positions = database.get_all_positions()
-    departments = database.get_all_departments()
+    pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
+    positions = [_pos_to_dict(p) for p in pos_resp.positions]
+    dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
+    departments = [_dept_to_dict(d) for d in dept_resp.departments]
+
+    form_data = employee
+    errors = {}
 
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
@@ -93,45 +159,57 @@ def edit(employee_id):
         email = request.form.get("email", "").strip()
         phone = request.form.get("phone", "").strip()
 
-        error = validate_form(full_name, position, department, email, phone)
-        if error:
-            flash(error, "error")
-        else:
-            try:
-                database.update(employee_id, full_name, position, department, email, phone)
+        form_data = dict(full_name=full_name, position=position,
+                         department=department, email=email, phone=phone)
+        errors = validate_form(full_name, position, department, email, phone)
+
+        if not errors:
+            result = stub.UpdateEmployee(employees_pb2.UpdateEmployeeRequest(
+                id=employee_id, full_name=full_name, position=position,
+                department=department, email=email, phone=phone,
+            ))
+            if result.success:
                 flash(f"Данные сотрудника «{full_name}» обновлены.", "success")
                 return redirect(url_for("index"))
-            except sqlite3.IntegrityError:
-                flash("Сотрудник с таким email уже существует.", "error")
+            elif result.error == "duplicate_email":
+                errors["email"] = "Сотрудник с таким email уже существует."
 
     return render_template("form.html", action="edit", employee=employee,
-                           positions=positions, departments=departments)
+                           positions=positions, departments=departments,
+                           form_data=form_data, errors=errors)
 
 
 @app.route("/history/<int:employee_id>")
 def history(employee_id):
-    employee = database.get_by_id(employee_id)
-    if employee is None:
+    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    if not emp_resp.found:
         flash("Сотрудник не найден.", "error")
         return redirect(url_for("index"))
-    records = database.get_history(employee_id)
+    employee = _emp_to_dict(emp_resp.employee)
+    hist_resp = stub.GetHistory(employees_pb2.GetHistoryRequest(employee_id=employee_id))
+    records = [_history_to_dict(r) for r in hist_resp.records]
     return render_template("history.html", employee=employee, records=records)
 
 
 @app.route("/delete/<int:employee_id>", methods=["POST"])
 def delete(employee_id):
-    employee = database.get_by_id(employee_id)
-    if employee:
-        database.delete(employee_id)
+    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    if emp_resp.found:
+        employee = _emp_to_dict(emp_resp.employee)
+        stub.DeleteEmployee(employees_pb2.DeleteEmployeeRequest(id=employee_id))
         flash(f"Сотрудник «{employee['full_name']}» удалён.", "success")
     return redirect(url_for("index"))
 
 
 @app.route("/positions")
 def positions():
-    items = database.get_all_positions()
+    pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
+    items = [_pos_to_dict(p) for p in pos_resp.positions]
     edit_id = request.args.get("edit", type=int)
-    edit_item = database.get_position_by_id(edit_id) if edit_id else None
+    edit_item = None
+    if edit_id:
+        edit_resp = stub.GetPosition(employees_pb2.GetPositionRequest(id=edit_id))
+        edit_item = _pos_to_dict(edit_resp.position) if edit_resp.found else None
     return render_template(
         "reference.html",
         title="Должности",
@@ -150,10 +228,10 @@ def position_create():
     if error:
         flash(error, "error")
     else:
-        try:
-            database.create_position(name)
+        result = stub.CreatePosition(employees_pb2.CreatePositionRequest(name=name))
+        if result.success:
             flash(f"Должность «{name}» добавлена.", "success")
-        except sqlite3.IntegrityError:
+        elif result.error == "duplicate_name":
             flash(f"Должность «{name}» уже существует.", "error")
     return redirect(url_for("positions"))
 
@@ -165,26 +243,30 @@ def position_edit(id):
     if error:
         flash(error, "error")
     else:
-        try:
-            database.update_position(id, name)
+        result = stub.UpdatePosition(employees_pb2.UpdatePositionRequest(id=id, name=name))
+        if result.success:
             flash(f"Должность обновлена.", "success")
-        except sqlite3.IntegrityError:
+        elif result.error == "duplicate_name":
             flash(f"Должность «{name}» уже существует.", "error")
     return redirect(url_for("positions"))
 
 
 @app.route("/positions/<int:id>/delete", methods=["POST"])
 def position_delete(id):
-    database.delete_position(id)
+    stub.DeletePosition(employees_pb2.DeletePositionRequest(id=id))
     flash("Должность удалена.", "success")
     return redirect(url_for("positions"))
 
 
 @app.route("/departments")
 def departments():
-    items = database.get_all_departments()
+    dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
+    items = [_dept_to_dict(d) for d in dept_resp.departments]
     edit_id = request.args.get("edit", type=int)
-    edit_item = database.get_department_by_id(edit_id) if edit_id else None
+    edit_item = None
+    if edit_id:
+        edit_resp = stub.GetDepartment(employees_pb2.GetDepartmentRequest(id=edit_id))
+        edit_item = _dept_to_dict(edit_resp.department) if edit_resp.found else None
     return render_template(
         "reference.html",
         title="Отделы",
@@ -203,10 +285,10 @@ def department_create():
     if error:
         flash(error, "error")
     else:
-        try:
-            database.create_department(name)
+        result = stub.CreateDepartment(employees_pb2.CreateDepartmentRequest(name=name))
+        if result.success:
             flash(f"Отдел «{name}» добавлен.", "success")
-        except sqlite3.IntegrityError:
+        elif result.error == "duplicate_name":
             flash(f"Отдел «{name}» уже существует.", "error")
     return redirect(url_for("departments"))
 
@@ -218,17 +300,17 @@ def department_edit(id):
     if error:
         flash(error, "error")
     else:
-        try:
-            database.update_department(id, name)
+        result = stub.UpdateDepartment(employees_pb2.UpdateDepartmentRequest(id=id, name=name))
+        if result.success:
             flash(f"Отдел обновлён.", "success")
-        except sqlite3.IntegrityError:
+        elif result.error == "duplicate_name":
             flash(f"Отдел «{name}» уже существует.", "error")
     return redirect(url_for("departments"))
 
 
 @app.route("/departments/<int:id>/delete", methods=["POST"])
 def department_delete(id):
-    database.delete_department(id)
+    stub.DeleteDepartment(employees_pb2.DeleteDepartmentRequest(id=id))
     flash("Отдел удалён.", "success")
     return redirect(url_for("departments"))
 

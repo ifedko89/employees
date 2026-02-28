@@ -1,16 +1,37 @@
+import concurrent.futures
+
+import grpc
 import pytest
 from faker import Faker
+
 import database
+import employees_pb2_grpc
+import grpc_server
+import app as flask_app_module
 from app import app as flask_app
 
 fake = Faker("ru_RU")
 
 
 @pytest.fixture(autouse=True)
-def setup_db(tmp_path, monkeypatch):
-    db_file = tmp_path / "test.db"
-    monkeypatch.setattr(database, "DB_PATH", db_file)
+def setup_db(postgresql, monkeypatch):
+    info = postgresql.info
+    dsn = f"postgresql://{info.user}@{info.host}:{info.port}/{info.dbname}"
+    monkeypatch.setattr(database, "DATABASE_URL", dsn)
     database.init_db()
+
+    server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2))
+    employees_pb2_grpc.add_EmployeesServiceServicer_to_server(
+        grpc_server.EmployeesServicer(), server
+    )
+    port = server.add_insecure_port("[::]:0")
+    server.start()
+
+    channel = grpc.insecure_channel(f"localhost:{port}")
+    monkeypatch.setattr(flask_app_module, "stub",
+                        employees_pb2_grpc.EmployeesServiceStub(channel))
+    yield
+    server.stop(0)
 
 
 @pytest.fixture
@@ -28,8 +49,7 @@ def make_employee():
         department = department or fake.company()[:50]
         email = email or fake.email()
         database.create(full_name, position, department, email, phone)
-        with database.get_connection() as conn:
-            return conn.execute(
-                "SELECT * FROM employees ORDER BY id DESC LIMIT 1"
-            ).fetchone()
+        with database._cursor() as cur:
+            cur.execute("SELECT * FROM employees ORDER BY id DESC LIMIT 1")
+            return cur.fetchone()
     return _make
