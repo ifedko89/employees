@@ -191,6 +191,20 @@ def test_position_update():
         pos = database.get_position_by_id(pos_id)
         assert pos["name"] == "QA-инженер"
 
+@allure.feature("База данных")
+@allure.story("Справочник должностей")
+@allure.title("Обновление должности на null")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_position_update():
+    with allure.step("Создать должность"):
+        database.create_position("Тестировщик")
+        items = database.get_all_positions()
+        pos_id = items[0]["id"]
+    with allure.step("Обновить название на null"):
+        database.update_position(pos_id, "")
+    with allure.step("Проверить изменение"):
+        pos = database.get_position_by_id(pos_id)
+        assert pos["name"] == ""
 
 @allure.feature("База данных")
 @allure.story("Справочник должностей")
@@ -302,7 +316,9 @@ def test_get_departments_from_table():
     with allure.step("Создать отделы в таблице departments"):
         database.create_department("Финансы")
         database.create_department("Юридический")
+        database.create_department("Дирекция")
     with allure.step("get_departments возвращает их"):
         depts = database.get_departments()
         assert "Финансы" in depts
         assert "Юридический" in depts
+        assert "Дирекция" in depts

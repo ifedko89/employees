@@ -58,17 +58,28 @@ jobs:
         if: always()
         run: sudo rm -rf allure-history/.git
 
-      - name: Add coverage heatmap to published report
-        if: always()
-        run: sudo cp -r htmlcov allure-history/coverage
-
-      - name: Deploy report to GitHub Pages
+      - name: Deploy Allure report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         if: always()
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+          keep_files: true
+
+      - name: Deploy coverage heatmap to GitHub Pages
+        if: always()
+        run: rm -f htmlcov/.gitignore  # coverage.py создаёт этот файл, он блокирует git add
+
+      - name: Deploy coverage heatmap to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: htmlcov
+          destination_dir: coverage
+          keep_files: true
 
       - name: Comment PR with report link
         uses: actions/github-script@v7
