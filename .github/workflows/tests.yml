@@ -68,10 +68,6 @@ jobs:
           keep_files: true
 
       - name: Deploy coverage heatmap to GitHub Pages
-        if: always()
-        run: rm -f htmlcov/.gitignore  # coverage.py создаёт этот файл, он блокирует git add
-
-      - name: Deploy coverage heatmap to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         if: always()
         with:
