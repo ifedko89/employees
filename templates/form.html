@@ -1,108 +1,86 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="row justify-content-center">
-  <div class="col-md-6 col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">
-          {% if action == "edit" %}Редактировать сотрудника{% else %}Новый сотрудник{% endif %}
-        </h5>
-        {% if action == "edit" and employee %}
-          <small class="opacity-75">
-            {% if employee.created_at %}Создан: <time datetime="{{ employee.created_at }}">{{ employee.created_at }}</time>&emsp;{% endif %}
-            {% if employee.updated_at %}Изменён: <time datetime="{{ employee.updated_at }}">{{ employee.updated_at }}</time>{% endif %}
-          </small>
-        {% endif %}
-      </div>
-      <div class="card-body">
-        <form method="post" novalidate>
+<div style="max-width:560px;">
 
-          <div class="mb-3">
-            <label class="form-label">
-              ФИО <span class="text-danger">*</span>
-            </label>
-            <input class="form-control{% if errors.full_name %} is-invalid{% endif %}"
-                   name="full_name" required autofocus
-                   minlength="3" maxlength="50"
-                   placeholder="Иванов Иван Иванович"
-                   value="{{ form_data.full_name }}">
-            {% if errors.full_name %}
-              <div class="invalid-feedback">{{ errors.full_name }}</div>
-            {% endif %}
-          </div>
+  <div class="page-header" style="margin-bottom:24px;">
+    <div>
+      <h1 class="page-title">
+        {% if action == "edit" %}Редактировать сотрудника{% else %}Новый сотрудник{% endif %}
+      </h1>
+      {% if action == "edit" and employee %}
+        <p class="page-meta">
+          {% if employee.created_at %}Создан: <time datetime="{{ employee.created_at }}">{{ employee.created_at }}</time>{% endif %}
+          {% if employee.created_at and employee.updated_at %} &middot; {% endif %}
+          {% if employee.updated_at %}Изменён: <time datetime="{{ employee.updated_at }}">{{ employee.updated_at }}</time>{% endif %}
+        </p>
+      {% endif %}
+    </div>
+    <a href="/" class="btn-ghost">Отмена</a>
+  </div>
 
-          <div class="mb-3">
-            <label class="form-label">
-              Должность <span class="text-danger">*</span>
-            </label>
-            <select class="form-select{% if errors.position %} is-invalid{% endif %}"
-                    name="position" required>
-              <option value="">— Выберите должность —</option>
-              {% for p in positions %}
-                <option value="{{ p.name }}"
-                        {% if form_data.position == p.name %}selected{% endif %}>
-                  {{ p.name }}
-                </option>
-              {% endfor %}
-            </select>
-            {% if errors.position %}
-              <div class="invalid-feedback">{{ errors.position }}</div>
-            {% endif %}
-          </div>
+  <div class="app-card">
+    <div style="padding:24px;">
+      <form method="post" novalidate>
 
-          <div class="mb-3">
-            <label class="form-label">
-              Отдел <span class="text-danger">*</span>
-            </label>
-            <select class="form-select{% if errors.department %} is-invalid{% endif %}"
-                    name="department" required>
-              <option value="">— Выберите отдел —</option>
-              {% for d in departments %}
-                <option value="{{ d.name }}"
-                        {% if form_data.department == d.name %}selected{% endif %}>
-                  {{ d.name }}
-                </option>
-              {% endfor %}
-            </select>
-            {% if errors.department %}
-              <div class="invalid-feedback">{{ errors.department }}</div>
-            {% endif %}
-          </div>
+        <div style="margin-bottom:20px;">
+          <label class="form-label">ФИО <span style="color:var(--danger);">*</span></label>
+          <input class="form-control{% if errors.full_name %} is-invalid{% endif %}"
+                 name="full_name" required autofocus
+                 minlength="3" maxlength="50"
+                 placeholder="Иванов Иван Иванович"
+                 value="{{ form_data.full_name }}">
+          {% if errors.full_name %}<div class="invalid-feedback">{{ errors.full_name }}</div>{% endif %}
+        </div>
 
-          <div class="mb-3">
-            <label class="form-label">
-              Email <span class="text-danger">*</span>
-            </label>
-            <input class="form-control{% if errors.email %} is-invalid{% endif %}"
-                   name="email" type="email"
-                   placeholder="ivanov@example.com"
-                   value="{{ form_data.email }}">
-            {% if errors.email %}
-              <div class="invalid-feedback">{{ errors.email }}</div>
-            {% endif %}
-          </div>
+        <div style="margin-bottom:20px;">
+          <label class="form-label">Должность <span style="color:var(--danger);">*</span></label>
+          <select class="form-select{% if errors.position %} is-invalid{% endif %}"
+                  name="position" required>
+            <option value="">— Выберите должность —</option>
+            {% for p in positions %}
+              <option value="{{ p.name }}" {% if form_data.position == p.name %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </select>
+          {% if errors.position %}<div class="invalid-feedback">{{ errors.position }}</div>{% endif %}
+        </div>
 
-          <div class="mb-4">
-            <label class="form-label">Телефон</label>
-            <input class="form-control{% if errors.phone %} is-invalid{% endif %}"
-                   name="phone"
-                   placeholder="+7 999 123-45-67"
-                   value="{{ form_data.phone }}">
-            {% if errors.phone %}
-              <div class="invalid-feedback">{{ errors.phone }}</div>
-            {% endif %}
-          </div>
+        <div style="margin-bottom:20px;">
+          <label class="form-label">Отдел <span style="color:var(--danger);">*</span></label>
+          <select class="form-select{% if errors.department %} is-invalid{% endif %}"
+                  name="department" required>
+            <option value="">— Выберите отдел —</option>
+            {% for d in departments %}
+              <option value="{{ d.name }}" {% if form_data.department == d.name %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+          {% if errors.department %}<div class="invalid-feedback">{{ errors.department }}</div>{% endif %}
+        </div>
 
-          <div class="d-flex gap-2">
-            <button class="btn btn-primary">Сохранить</button>
-            <a href="/" class="btn btn-outline-secondary">Отмена</a>
-          </div>
+        <div style="margin-bottom:20px;">
+          <label class="form-label">Email <span style="color:var(--danger);">*</span></label>
+          <input class="form-control{% if errors.email %} is-invalid{% endif %}"
+                 name="email" type="email"
+                 placeholder="ivanov@example.com"
+                 value="{{ form_data.email }}">
+          {% if errors.email %}<div class="invalid-feedback">{{ errors.email }}</div>{% endif %}
+        </div>
 
-        </form>
-      </div>
+        <div style="margin-bottom:28px;">
+          <label class="form-label">Телефон</label>
+          <input class="form-control{% if errors.phone %} is-invalid{% endif %}"
+                 name="phone"
+                 placeholder="+7 999 123-45-67"
+                 value="{{ form_data.phone }}">
+          {% if errors.phone %}<div class="invalid-feedback">{{ errors.phone }}</div>{% endif %}
+        </div>
+
+        <button type="submit" class="btn-solid">Сохранить</button>
+
+      </form>
     </div>
   </div>
+
 </div>
 
 {% endblock %}
