@@ -22,54 +22,76 @@
             <label class="form-label">
               ФИО <span class="text-danger">*</span>
             </label>
-            <input class="form-control" name="full_name" required autofocus
+            <input class="form-control{% if errors.full_name %} is-invalid{% endif %}"
+                   name="full_name" required autofocus
                    minlength="3" maxlength="50"
                    placeholder="Иванов Иван Иванович"
-                   value="{{ employee.full_name if employee else '' }}">
+                   value="{{ form_data.full_name }}">
+            {% if errors.full_name %}
+              <div class="invalid-feedback">{{ errors.full_name }}</div>
+            {% endif %}
           </div>
 
           <div class="mb-3">
             <label class="form-label">
               Должность <span class="text-danger">*</span>
             </label>
-            <select class="form-select" name="position" required>
+            <select class="form-select{% if errors.position %} is-invalid{% endif %}"
+                    name="position" required>
               <option value="">— Выберите должность —</option>
               {% for p in positions %}
                 <option value="{{ p.name }}"
-                        {% if employee and employee.position == p.name %}selected{% endif %}>
+                        {% if form_data.position == p.name %}selected{% endif %}>
                   {{ p.name }}
                 </option>
               {% endfor %}
             </select>
+            {% if errors.position %}
+              <div class="invalid-feedback">{{ errors.position }}</div>
+            {% endif %}
           </div>
 
           <div class="mb-3">
             <label class="form-label">
               Отдел <span class="text-danger">*</span>
             </label>
-            <select class="form-select" name="department" required>
+            <select class="form-select{% if errors.department %} is-invalid{% endif %}"
+                    name="department" required>
               <option value="">— Выберите отдел —</option>
               {% for d in departments %}
                 <option value="{{ d.name }}"
-                        {% if employee and employee.department == d.name %}selected{% endif %}>
+                        {% if form_data.department == d.name %}selected{% endif %}>
                   {{ d.name }}
                 </option>
               {% endfor %}
             </select>
+            {% if errors.department %}
+              <div class="invalid-feedback">{{ errors.department }}</div>
+            {% endif %}
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input class="form-control" name="email" type="email"
+            <label class="form-label">
+              Email <span class="text-danger">*</span>
+            </label>
+            <input class="form-control{% if errors.email %} is-invalid{% endif %}"
+                   name="email" type="email"
                    placeholder="ivanov@example.com"
-                   value="{{ employee.email if employee else '' }}">
+                   value="{{ form_data.email }}">
+            {% if errors.email %}
+              <div class="invalid-feedback">{{ errors.email }}</div>
+            {% endif %}
           </div>
 
           <div class="mb-4">
             <label class="form-label">Телефон</label>
-            <input class="form-control" name="phone"
+            <input class="form-control{% if errors.phone %} is-invalid{% endif %}"
+                   name="phone"
                    placeholder="+7 999 123-45-67"
-                   value="{{ employee.phone if employee else '' }}">
+                   value="{{ form_data.phone }}">
+            {% if errors.phone %}
+              <div class="invalid-feedback">{{ errors.phone }}</div>
+            {% endif %}
           </div>
 
           <div class="d-flex gap-2">

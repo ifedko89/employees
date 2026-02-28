@@ -1,23 +1,38 @@
 import os
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 
-DB_PATH = Path(os.environ.get("DATABASE_PATH", Path(__file__).parent / "employees.db"))
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/employees",
+)
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DATABASE_URL)
+
+
+@contextmanager
+def _cursor():
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with get_connection() as conn:
-        conn.execute("""
+    with _cursor() as cur:
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS employees (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                id         SERIAL PRIMARY KEY,
                 full_name  TEXT NOT NULL,
                 position   TEXT NOT NULL,
                 department TEXT NOT NULL,
@@ -27,14 +42,12 @@ def init_db():
                 updated_at TEXT
             )
         """)
-        for col in ("created_at", "updated_at"):
-            try:
-                conn.execute(f"ALTER TABLE employees ADD COLUMN {col} TEXT")
-            except sqlite3.OperationalError:
-                pass
-        conn.execute("""
+        # Миграция: добавляем колонки если их нет (для существующих БД)
+        cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS created_at TEXT")
+        cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS updated_at TEXT")
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS employee_history (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                id          SERIAL PRIMARY KEY,
                 employee_id INTEGER NOT NULL,
                 changed_at  TEXT NOT NULL,
                 change_type TEXT NOT NULL,
@@ -43,20 +56,26 @@ def init_db():
                 new_value   TEXT
             )
         """)
-        conn.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS positions (
-                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                id   SERIAL PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE
             )
         """)
-        conn.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS departments (
-                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                id   SERIAL PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE
             )
         """)
-        conn.execute("INSERT OR IGNORE INTO positions (name) SELECT DISTINCT position FROM employees")
-        conn.execute("INSERT OR IGNORE INTO departments (name) SELECT DISTINCT department FROM employees")
+        cur.execute(
+            "INSERT INTO positions (name) SELECT DISTINCT position FROM employees"
+            " ON CONFLICT DO NOTHING"
+        )
+        cur.execute(
+            "INSERT INTO departments (name) SELECT DISTINCT department FROM employees"
+            " ON CONFLICT DO NOTHING"
+        )
 
 
 _ALLOWED_SORT = {"full_name", "position", "department"}
@@ -72,98 +91,99 @@ def get_all(search: str = "", sort: str = "full_name",
     if search:
         like = f"%{search}%"
         conditions.append(
-            "(full_name LIKE ? OR position LIKE ? OR department LIKE ?)"
+            "(full_name LIKE %s OR position LIKE %s OR department LIKE %s)"
         )
         params.extend([like, like, like])
     if dept:
-        conditions.append("department = ?")
+        conditions.append("department = %s")
         params.append(dept)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     sql = f"SELECT * FROM employees {where} ORDER BY {sort} {order_sql}"
-    with get_connection() as conn:
-        return conn.execute(sql, params).fetchall()
+    with _cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchall()
 
 
 def get_departments() -> list:
-    with get_connection() as conn:
-        rows = conn.execute("SELECT name FROM departments ORDER BY name").fetchall()
+    with _cursor() as cur:
+        cur.execute('SELECT name FROM departments ORDER BY name COLLATE "C"')
+        rows = cur.fetchall()
         return [r["name"] for r in rows]
 
 
 def get_all_positions() -> list:
-    with get_connection() as conn:
-        return conn.execute("SELECT * FROM positions ORDER BY name").fetchall()
+    with _cursor() as cur:
+        cur.execute('SELECT * FROM positions ORDER BY name COLLATE "C"')
+        return cur.fetchall()
 
 
 def get_position_by_id(position_id: int):
-    with get_connection() as conn:
-        return conn.execute(
-            "SELECT * FROM positions WHERE id = ?", (position_id,)
-        ).fetchone()
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM positions WHERE id = %s", (position_id,))
+        return cur.fetchone()
 
 
 def create_position(name: str):
-    with get_connection() as conn:
-        conn.execute("INSERT INTO positions (name) VALUES (?)", (name,))
+    with _cursor() as cur:
+        cur.execute("INSERT INTO positions (name) VALUES (%s)", (name,))
 
 
 def update_position(position_id: int, name: str):
-    with get_connection() as conn:
-        conn.execute("UPDATE positions SET name = ? WHERE id = ?", (name, position_id))
+    with _cursor() as cur:
+        cur.execute("UPDATE positions SET name = %s WHERE id = %s", (name, position_id))
 
 
 def delete_position(position_id: int):
-    with get_connection() as conn:
-        conn.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+    with _cursor() as cur:
+        cur.execute("DELETE FROM positions WHERE id = %s", (position_id,))
 
 
 def get_all_departments() -> list:
-    with get_connection() as conn:
-        return conn.execute("SELECT * FROM departments ORDER BY name").fetchall()
+    with _cursor() as cur:
+        cur.execute('SELECT * FROM departments ORDER BY name COLLATE "C"')
+        return cur.fetchall()
 
 
 def get_department_by_id(department_id: int):
-    with get_connection() as conn:
-        return conn.execute(
-            "SELECT * FROM departments WHERE id = ?", (department_id,)
-        ).fetchone()
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM departments WHERE id = %s", (department_id,))
+        return cur.fetchone()
 
 
 def create_department(name: str):
-    with get_connection() as conn:
-        conn.execute("INSERT INTO departments (name) VALUES (?)", (name,))
+    with _cursor() as cur:
+        cur.execute("INSERT INTO departments (name) VALUES (%s)", (name,))
 
 
 def update_department(department_id: int, name: str):
-    with get_connection() as conn:
-        conn.execute("UPDATE departments SET name = ? WHERE id = ?", (name, department_id))
+    with _cursor() as cur:
+        cur.execute("UPDATE departments SET name = %s WHERE id = %s", (name, department_id))
 
 
 def delete_department(department_id: int):
-    with get_connection() as conn:
-        conn.execute("DELETE FROM departments WHERE id = ?", (department_id,))
+    with _cursor() as cur:
+        cur.execute("DELETE FROM departments WHERE id = %s", (department_id,))
 
 
 def get_by_id(employee_id: int):
-    with get_connection() as conn:
-        return conn.execute(
-            "SELECT * FROM employees WHERE id = ?", (employee_id,)
-        ).fetchone()
+    with _cursor() as cur:
+        cur.execute("SELECT * FROM employees WHERE id = %s", (employee_id,))
+        return cur.fetchone()
 
 
 def create(full_name: str, position: str, department: str, email: str, phone: str):
     now = datetime.now(timezone.utc).isoformat()
-    with get_connection() as conn:
-        cursor = conn.execute(
+    with _cursor() as cur:
+        cur.execute(
             "INSERT INTO employees (full_name, position, department, email, phone, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (full_name, position, department, email, phone, now, now),
         )
-        employee_id = cursor.lastrowid
-        conn.execute(
+        employee_id = cur.fetchone()["id"]
+        cur.execute(
             "INSERT INTO employee_history (employee_id, changed_at, change_type)"
-            " VALUES (?, ?, ?)",
+            " VALUES (%s, %s, %s)",
             (employee_id, now, "create"),
         )
 
@@ -179,31 +199,32 @@ def update(employee_id: int, full_name: str, position: str, department: str,
         ("email", old["email"], email),
         ("phone", old["phone"] or "", phone or ""),
     ]
-    with get_connection() as conn:
-        conn.execute(
+    with _cursor() as cur:
+        cur.execute(
             "UPDATE employees"
-            " SET full_name=?, position=?, department=?, email=?, phone=?, updated_at=?"
-            " WHERE id=?",
+            " SET full_name=%s, position=%s, department=%s, email=%s, phone=%s, updated_at=%s"
+            " WHERE id=%s",
             (full_name, position, department, email, phone, now, employee_id),
         )
         for field_name, old_val, new_val in fields:
             if (old_val or "") != (new_val or ""):
-                conn.execute(
+                cur.execute(
                     "INSERT INTO employee_history"
                     " (employee_id, changed_at, change_type, field_name, old_value, new_value)"
-                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    " VALUES (%s, %s, %s, %s, %s, %s)",
                     (employee_id, now, "update", field_name, old_val, new_val),
                 )
 
 
 def get_history(employee_id: int) -> list:
-    with get_connection() as conn:
-        return conn.execute(
-            "SELECT * FROM employee_history WHERE employee_id = ? ORDER BY changed_at DESC",
+    with _cursor() as cur:
+        cur.execute(
+            "SELECT * FROM employee_history WHERE employee_id = %s ORDER BY changed_at DESC",
             (employee_id,),
-        ).fetchall()
+        )
+        return cur.fetchall()
 
 
 def delete(employee_id: int):
-    with get_connection() as conn:
-        conn.execute("DELETE FROM employees WHERE id = ?", (employee_id,))
+    with _cursor() as cur:
+        cur.execute("DELETE FROM employees WHERE id = %s", (employee_id,))

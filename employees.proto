@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+service EmployeesService {
+    rpc ListEmployees(ListEmployeesRequest) returns (ListEmployeesResponse);
+    rpc GetEmployee(GetEmployeeRequest) returns (GetEmployeeResponse);
+    rpc CreateEmployee(CreateEmployeeRequest) returns (OperationResponse);
+    rpc UpdateEmployee(UpdateEmployeeRequest) returns (OperationResponse);
+    rpc DeleteEmployee(DeleteEmployeeRequest) returns (OperationResponse);
+    rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+
+    rpc ListDepartments(ListDepartmentsRequest) returns (ListDepartmentsResponse);
+    rpc GetDepartment(GetDepartmentRequest) returns (GetDepartmentResponse);
+    rpc CreateDepartment(CreateDepartmentRequest) returns (OperationResponse);
+    rpc UpdateDepartment(UpdateDepartmentRequest) returns (OperationResponse);
+    rpc DeleteDepartment(DeleteDepartmentRequest) returns (OperationResponse);
+
+    rpc ListPositions(ListPositionsRequest) returns (ListPositionsResponse);
+    rpc GetPosition(GetPositionRequest) returns (GetPositionResponse);
+    rpc CreatePosition(CreatePositionRequest) returns (OperationResponse);
+    rpc UpdatePosition(UpdatePositionRequest) returns (OperationResponse);
+    rpc DeletePosition(DeletePositionRequest) returns (OperationResponse);
+}
+
+message Employee {
+    int32 id = 1;
+    string full_name = 2;
+    string position = 3;
+    string department = 4;
+    string email = 5;
+    string phone = 6;
+    string created_at = 7;
+    string updated_at = 8;
+}
+
+message HistoryRecord {
+    int32 id = 1;
+    int32 employee_id = 2;
+    string changed_at = 3;
+    string change_type = 4;
+    string field_name = 5;
+    string old_value = 6;
+    string new_value = 7;
+}
+
+message Department {
+    int32 id = 1;
+    string name = 2;
+}
+
+message Position {
+    int32 id = 1;
+    string name = 2;
+}
+
+message OperationResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// --- Employees ---
+
+message ListEmployeesRequest {
+    string search = 1;
+    string sort = 2;
+    string order = 3;
+    string dept = 4;
+}
+
+message ListEmployeesResponse {
+    repeated Employee employees = 1;
+}
+
+message GetEmployeeRequest {
+    int32 id = 1;
+}
+
+message GetEmployeeResponse {
+    Employee employee = 1;
+    bool found = 2;
+}
+
+message CreateEmployeeRequest {
+    string full_name = 1;
+    string position = 2;
+    string department = 3;
+    string email = 4;
+    string phone = 5;
+}
+
+message UpdateEmployeeRequest {
+    int32 id = 1;
+    string full_name = 2;
+    string position = 3;
+    string department = 4;
+    string email = 5;
+    string phone = 6;
+}
+
+message DeleteEmployeeRequest {
+    int32 id = 1;
+}
+
+message GetHistoryRequest {
+    int32 employee_id = 1;
+}
+
+message GetHistoryResponse {
+    repeated HistoryRecord records = 1;
+}
+
+// --- Departments ---
+
+message ListDepartmentsRequest {}
+
+message ListDepartmentsResponse {
+    repeated Department departments = 1;
+}
+
+message GetDepartmentRequest {
+    int32 id = 1;
+}
+
+message GetDepartmentResponse {
+    Department department = 1;
+    bool found = 2;
+}
+
+message CreateDepartmentRequest {
+    string name = 1;
+}
+
+message UpdateDepartmentRequest {
+    int32 id = 1;
+    string name = 2;
+}
+
+message DeleteDepartmentRequest {
+    int32 id = 1;
+}
+
+// --- Positions ---
+
+message ListPositionsRequest {}
+
+message ListPositionsResponse {
+    repeated Position positions = 1;
+}
+
+message GetPositionRequest {
+    int32 id = 1;
+}
+
+message GetPositionResponse {
+    Position position = 1;
+    bool found = 2;
+}
+
+message CreatePositionRequest {
+    string name = 1;
+}
+
+message UpdatePositionRequest {
+    int32 id = 1;
+    string name = 2;
+}
+
+message DeletePositionRequest {
+    int32 id = 1;
+}

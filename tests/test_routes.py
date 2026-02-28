@@ -84,7 +84,7 @@ def test_create_post_valid(client):
 @pytest.mark.parametrize("data,expected_text", [
     (
         {"full_name": "", "position": "Разработчик", "department": "ИТ-отдел", "email": "testerov@tester.fv", "phone": ""},
-        "обязательные",
+        "Обязательное",
     ),
     (
         {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "not-an-email", "phone": ""},
@@ -156,7 +156,7 @@ def test_edit_post_valid(client, make_employee):
 @pytest.mark.parametrize("data,expected_text", [
     (
         {"full_name": "", "position": "Менеджер", "department": "Кадры", "email": "manager@ozon.ru", "phone": ""},
-        "обязательные",
+        "Обязательное",
     ),
     (
         {"full_name": "Иван Иванов", "position": "Разработчик", "department": "ИТ-отдел", "email": "bad@fgbf", "phone": ""},
