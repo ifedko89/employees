@@ -60,7 +60,7 @@ jobs:
 
       - name: Add coverage heatmap to published report
         if: always()
-        run: cp -r htmlcov allure-history/coverage
+        run: sudo cp -r htmlcov allure-history/coverage
 
       - name: Deploy report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
