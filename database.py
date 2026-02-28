@@ -43,6 +43,20 @@ def init_db():
                 new_value   TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS positions (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS departments (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE
+            )
+        """)
+        conn.execute("INSERT OR IGNORE INTO positions (name) SELECT DISTINCT position FROM employees")
+        conn.execute("INSERT OR IGNORE INTO departments (name) SELECT DISTINCT department FROM employees")
 
 
 _ALLOWED_SORT = {"full_name", "position", "department"}
@@ -73,10 +87,62 @@ def get_all(search: str = "", sort: str = "full_name",
 
 def get_departments() -> list:
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT department FROM employees ORDER BY department"
-        ).fetchall()
-        return [r["department"] for r in rows]
+        rows = conn.execute("SELECT name FROM departments ORDER BY name").fetchall()
+        return [r["name"] for r in rows]
+
+
+def get_all_positions() -> list:
+    with get_connection() as conn:
+        return conn.execute("SELECT * FROM positions ORDER BY name").fetchall()
+
+
+def get_position_by_id(position_id: int):
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM positions WHERE id = ?", (position_id,)
+        ).fetchone()
+
+
+def create_position(name: str):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO positions (name) VALUES (?)", (name,))
+
+
+def update_position(position_id: int, name: str):
+    with get_connection() as conn:
+        conn.execute("UPDATE positions SET name = ? WHERE id = ?", (name, position_id))
+
+
+def delete_position(position_id: int):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+
+
+def get_all_departments() -> list:
+    with get_connection() as conn:
+        return conn.execute("SELECT * FROM departments ORDER BY name").fetchall()
+
+
+def get_department_by_id(department_id: int):
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM departments WHERE id = ?", (department_id,)
+        ).fetchone()
+
+
+def create_department(name: str):
+    with get_connection() as conn:
+        conn.execute("INSERT INTO departments (name) VALUES (?)", (name,))
+
+
+def update_department(department_id: int, name: str):
+    with get_connection() as conn:
+        conn.execute("UPDATE departments SET name = ? WHERE id = ?", (name, department_id))
+
+
+def delete_department(department_id: int):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM departments WHERE id = ?", (department_id,))
 
 
 def get_by_id(employee_id: int):

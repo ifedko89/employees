@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row">
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">
+          {% if edit_item %}Редактировать{% else %}Добавить{% endif %}
+        </h5>
+      </div>
+      <div class="card-body">
+        {% if edit_item %}
+          <form method="post" action="{{ edit_base_url }}/{{ edit_item.id }}/edit">
+            <div class="mb-3">
+              <label class="form-label">Название <span class="text-danger">*</span></label>
+              <input class="form-control" name="name" required autofocus
+                     minlength="2" maxlength="50"
+                     value="{{ edit_item.name }}">
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary btn-sm">Сохранить</button>
+              <a href="{{ edit_base_url }}" class="btn btn-outline-secondary btn-sm">Отмена</a>
+            </div>
+          </form>
+        {% else %}
+          <form method="post" action="{{ create_url }}">
+            <div class="mb-3">
+              <label class="form-label">Название <span class="text-danger">*</span></label>
+              <input class="form-control" name="name" required autofocus
+                     minlength="2" maxlength="50"
+                     placeholder="Новое значение">
+            </div>
+            <button class="btn btn-primary btn-sm">Добавить</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">{{ title }}</h5>
+      </div>
+      <div class="card-body p-0">
+        {% if items %}
+          <ul class="list-group list-group-flush">
+            {% for item in items %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span>{{ item.name }}</span>
+                <div class="d-flex gap-2">
+                  <a href="{{ edit_base_url }}?edit={{ item.id }}"
+                     class="btn btn-outline-secondary btn-sm">Изменить</a>
+                  <form method="post" action="{{ delete_base_url }}/{{ item.id }}/delete"
+                        onsubmit="return confirm('Удалить «{{ item.name }}»?')">
+                    <button class="btn btn-outline-danger btn-sm">Удалить</button>
+                  </form>
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted p-3 mb-0">Список пуст.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
