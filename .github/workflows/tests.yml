@@ -34,8 +34,12 @@ jobs:
             --junitxml=junit.xml \
             --cov=. \
             --cov-report=xml \
-            --cov-report=html:htmlcov \
+            --cov-report=json \
             --cov-report=term-missing
+
+      - name: Generate coverage heatmap
+        if: always()
+        run: python scripts/gen_coverage_heatmap.py
 
       - name: Get Allure history from gh-pages
         uses: actions/checkout@v4
@@ -68,16 +72,12 @@ jobs:
           keep_files: true
 
       - name: Deploy coverage heatmap to GitHub Pages
-        if: always()
-        run: rm -f htmlcov/.gitignore  # coverage.py создаёт этот файл, он блокирует git add
-
-      - name: Deploy coverage heatmap to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         if: always()
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: htmlcov
+          publish_dir: coverage_heatmap
           destination_dir: coverage
           keep_files: true
 

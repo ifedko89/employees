@@ -3,3 +3,4 @@ pytest-cov
 allure-pytest
 faker
 pytest-postgresql>=6.0
+plotly>=5.0
