@@ -63,11 +63,13 @@ def test_create_get(client):
 @allure.title("POST /create — валидные данные → редирект и запись в БД")
 @allure.severity(allure.severity_level.CRITICAL)
 def test_create_post_valid(client):
+    pos_id = database.get_or_create_position("Разработчик")
+    dept_id = database.get_or_create_department("ИТ-отдел")
     with allure.step("POST /create с валидными данными"):
         resp = client.post("/create", data={
             "full_name": "Иван Иванов",
-            "position": "Разработчик",
-            "department": "ИТ-отдел",
+            "position": pos_id,
+            "department": dept_id,
             "email": "ivanov@apple.com",
             "phone": "",
         })
@@ -135,11 +137,13 @@ def test_edit_get_nonexistent(client):
 def test_edit_post_valid(client, make_employee):
     with allure.step("Создать сотрудника"):
         emp = make_employee()
+    pos_id = database.get_or_create_position("Менеджер")
+    dept_id = database.get_or_create_department("Кадры")
     with allure.step(f"POST /edit/{emp['id']} с новыми данными"):
         resp = client.post(f"/edit/{emp['id']}", data={
             "full_name": "Пётр Петров",
-            "position": "Менеджер",
-            "department": "Кадры",
+            "position": pos_id,
+            "department": dept_id,
             "email": "new@email.com",
             "phone": "",
         })
@@ -405,11 +409,16 @@ def test_edit_form_preselects_position(client, make_employee):
 def test_create_duplicate_email(client):
     email = "ivan@example.com"
 
+    pos1_id = database.get_or_create_position("Разработчик")
+    dept1_id = database.get_or_create_department("ИТ-отдел")
+    pos2_id = database.get_or_create_position("Менеджер")
+    dept2_id = database.get_or_create_department("Кадры")
+
     with allure.step("Создать первого сотрудника"):
         resp = client.post("/create", data={
             "full_name": "Иван Иванов",
-            "position": "Разработчик",
-            "department": "ИТ-отдел",
+            "position": pos1_id,
+            "department": dept1_id,
             "email": email,
             "phone": "",
         })
@@ -418,8 +427,8 @@ def test_create_duplicate_email(client):
     with allure.step("Попытаться создать второго сотрудника с тем же email"):
         resp = client.post("/create", data={
             "full_name": "Другой Человек",
-            "position": "Менеджер",
-            "department": "Кадры",
+            "position": pos2_id,
+            "department": dept2_id,
             "email": email,
             "phone": "",
         })

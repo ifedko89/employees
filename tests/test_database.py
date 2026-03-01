@@ -27,7 +27,9 @@ def test_update(make_employee):
     with allure.step("Создать сотрудника"):
         emp = make_employee()
     with allure.step("Обновить все поля"):
-        database.update(emp["id"], "Пётр Петров", "Менеджер", "HR", "p2@p2.com", "+7 999 000 00 00")
+        pos_id = database.get_or_create_position("Менеджер")
+        dept_id = database.get_or_create_department("HR")
+        database.update(emp["id"], "Пётр Петров", pos_id, dept_id, "p2@p2.com", "+7 999 000 00 00")
     with allure.step("Проверить изменения в БД"):
         updated = database.get_by_id(emp["id"])
         assert updated["full_name"] == "Пётр Петров"
