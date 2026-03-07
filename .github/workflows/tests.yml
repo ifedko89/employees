@@ -15,7 +15,6 @@ jobs:
     permissions:
       checks: write
       pull-requests: write
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -26,8 +25,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run tests
         run: |
@@ -45,9 +43,118 @@ jobs:
         if: always()
         run: python scripts/gen_coverage_heatmap.py
 
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results/
+
+      - name: Upload coverage XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+      - name: Upload coverage heatmap
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-heatmap
+          path: coverage_heatmap/
+
+      - uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: junit.xml
+
+  ui-test:
+    runs-on: ubuntu-latest
+    needs: test
+
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run UI tests
+        run: |
+          PG_CTL=$(find /usr/lib/postgresql -name pg_ctl | sort -V | tail -1)
+          pytest tests/test_ui.py \
+            --postgresql-exec="$PG_CTL" \
+            -n auto \
+            --alluredir=allure-results-ui \
+            --junitxml=junit-ui.xml
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-ui
+          path: allure-results-ui/
+
+      - uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: junit-ui.xml
+          check_name: UI Test Results
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, ui-test]
+    if: always()
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Allure results (unit/route tests)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: allure-results
+          path: allure-results/
+
+      - name: Download Allure results (UI tests)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: allure-results-ui
+          path: allure-results/
+
+      - name: Download coverage XML
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: coverage-xml
+          path: .
+
+      - name: Download coverage heatmap
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: coverage-heatmap
+          path: coverage_heatmap/
+
       - name: Get Allure history from gh-pages
         uses: actions/checkout@v4
-        if: always()
         continue-on-error: true
         with:
           ref: gh-pages
@@ -86,8 +193,8 @@ jobs:
           keep_files: true
 
       - name: Comment PR with report link
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
-        if: always()
         with:
           script: |
             const fs = require('fs');
@@ -114,44 +221,3 @@ jobs:
                 `| 📈 Покрытие кода | **${covPct}** |`,
               ].join('\n'),
             });
-
-      - uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: junit.xml
-
-  ui-test:
-    runs-on: ubuntu-latest
-    needs: test
-
-    permissions:
-      checks: write
-      pull-requests: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
-
-      - name: Install Playwright browsers
-        run: playwright install chromium --with-deps
-
-      - name: Run UI tests
-        run: |
-          PG_CTL=$(find /usr/lib/postgresql -name pg_ctl | sort -V | tail -1)
-          pytest tests/test_ui.py \
-            --postgresql-exec="$PG_CTL" \
-            -n auto \
-            --junitxml=junit-ui.xml
-
-      - uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: junit-ui.xml
-          check_name: UI Test Results
