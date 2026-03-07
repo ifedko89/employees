@@ -1,8 +1,10 @@
 import concurrent.futures
+import threading
 
 import grpc
 import pytest
 from faker import Faker
+from werkzeug.serving import make_server
 
 import database
 import employees_pb2_grpc
@@ -39,6 +41,29 @@ def client(setup_db):
     flask_app.config["TESTING"] = True
     with flask_app.test_client() as c:
         yield c
+
+
+@pytest.fixture
+def live_server(setup_db):
+    """Запускает Flask на случайном порту в фоновом потоке."""
+    server = make_server("127.0.0.1", 0, flask_app)
+    port = server.socket.getsockname()[1]
+    t = threading.Thread(target=server.serve_forever)
+    t.daemon = True
+    t.start()
+    yield f"http://127.0.0.1:{port}"
+    server.shutdown()
+
+
+@pytest.fixture
+def pw_page(live_server):
+    """Открывает браузер Chromium и возвращает (page, base_url)."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        yield page, live_server
+        browser.close()
 
 
 @pytest.fixture
