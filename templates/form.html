@@ -39,7 +39,7 @@
                   name="position" required>
             <option value="">— Выберите должность —</option>
             {% for p in positions %}
-              <option value="{{ p.name }}" {% if form_data.position == p.name %}selected{% endif %}>{{ p.name }}</option>
+              <option value="{{ p.id }}" {% if form_data.get('position_id')|string == p.id|string %}selected{% endif %}>{{ p.name }}</option>
             {% endfor %}
           </select>
           {% if errors.position %}<div class="invalid-feedback">{{ errors.position }}</div>{% endif %}
@@ -51,7 +51,7 @@
                   name="department" required>
             <option value="">— Выберите отдел —</option>
             {% for d in departments %}
-              <option value="{{ d.name }}" {% if form_data.department == d.name %}selected{% endif %}>{{ d.name }}</option>
+              <option value="{{ d.id }}" {% if form_data.get('department_id')|string == d.id|string %}selected{% endif %}>{{ d.name }}</option>
             {% endfor %}
           </select>
           {% if errors.department %}<div class="invalid-feedback">{{ errors.department }}</div>{% endif %}

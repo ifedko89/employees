@@ -13,7 +13,9 @@ def _row_to_employee(row) -> employees_pb2.Employee:
         id=row["id"],
         full_name=row["full_name"],
         position=row["position"],
+        position_id=row["position_id"],
         department=row["department"],
+        department_id=row["department_id"],
         email=row["email"],
         phone=row["phone"] or "",
         created_at=row["created_at"] or "",
@@ -63,9 +65,11 @@ class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
         )
 
     def CreateEmployee(self, request, context):
+        if not request.position_id or not request.department_id:
+            return employees_pb2.OperationResponse(success=False, error="invalid_reference")
         try:
             database.create(
-                request.full_name, request.position, request.department,
+                request.full_name, request.position_id, request.department_id,
                 request.email, request.phone,
             )
             return employees_pb2.OperationResponse(success=True)
@@ -73,10 +77,12 @@ class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
             return employees_pb2.OperationResponse(success=False, error="duplicate_email")
 
     def UpdateEmployee(self, request, context):
+        if not request.position_id or not request.department_id:
+            return employees_pb2.OperationResponse(success=False, error="invalid_reference")
         try:
             database.update(
-                request.id, request.full_name, request.position,
-                request.department, request.email, request.phone,
+                request.id, request.full_name, request.position_id,
+                request.department_id, request.email, request.phone,
             )
             return employees_pb2.OperationResponse(success=True)
         except psycopg2.IntegrityError:
@@ -123,8 +129,11 @@ class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
             return employees_pb2.OperationResponse(success=False, error="duplicate_name")
 
     def DeleteDepartment(self, request, context):
-        database.delete_department(request.id)
-        return employees_pb2.OperationResponse(success=True)
+        try:
+            database.delete_department(request.id)
+            return employees_pb2.OperationResponse(success=True)
+        except psycopg2.IntegrityError:
+            return employees_pb2.OperationResponse(success=False, error="in_use")
 
     # --- Positions ---
 
@@ -157,8 +166,11 @@ class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
             return employees_pb2.OperationResponse(success=False, error="duplicate_name")
 
     def DeletePosition(self, request, context):
-        database.delete_position(request.id)
-        return employees_pb2.OperationResponse(success=True)
+        try:
+            database.delete_position(request.id)
+            return employees_pb2.OperationResponse(success=True)
+        except psycopg2.IntegrityError:
+            return employees_pb2.OperationResponse(success=False, error="in_use")
 
 
 def serve():

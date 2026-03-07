@@ -19,15 +19,15 @@ def validate_reference_name(name: str):
     return None
 
 
-def validate_form(full_name, position, department, email, phone):
+def validate_form(full_name, position_id, department_id, email, phone):
     errors = {}
     if not full_name:
         errors["full_name"] = "Обязательное поле."
     elif not (3 <= len(full_name) <= 50):
         errors["full_name"] = "От 3 до 50 символов."
-    if not position:
+    if not position_id:
         errors["position"] = "Обязательное поле."
-    if not department:
+    if not department_id:
         errors["department"] = "Обязательное поле."
     if not email:
         errors["email"] = "Обязательное поле."
@@ -51,7 +51,9 @@ def _emp_to_dict(emp):
         "id": emp.id,
         "full_name": emp.full_name,
         "position": emp.position,
+        "position_id": emp.position_id,
         "department": emp.department,
+        "department_id": emp.department_id,
         "email": emp.email,
         "phone": emp.phone,
         "created_at": emp.created_at,
@@ -111,18 +113,22 @@ def create():
 
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
-        position = request.form["position"].strip()
-        department = request.form["department"].strip()
         email = request.form.get("email", "").strip()
         phone = request.form.get("phone", "").strip()
+        try:
+            position_id = int(request.form["position"])
+            department_id = int(request.form["department"])
+        except (ValueError, KeyError):
+            position_id = 0
+            department_id = 0
 
-        form_data = dict(full_name=full_name, position=position,
-                         department=department, email=email, phone=phone)
-        errors = validate_form(full_name, position, department, email, phone)
+        form_data = dict(full_name=full_name, position_id=position_id,
+                         department_id=department_id, email=email, phone=phone)
+        errors = validate_form(full_name, position_id, department_id, email, phone)
 
         if not errors:
             result = stub.CreateEmployee(employees_pb2.CreateEmployeeRequest(
-                full_name=full_name, position=position, department=department,
+                full_name=full_name, position_id=position_id, department_id=department_id,
                 email=email, phone=phone,
             ))
             if result.success:
@@ -154,19 +160,23 @@ def edit(employee_id):
 
     if request.method == "POST":
         full_name = request.form["full_name"].strip()
-        position = request.form["position"].strip()
-        department = request.form["department"].strip()
         email = request.form.get("email", "").strip()
         phone = request.form.get("phone", "").strip()
+        try:
+            position_id = int(request.form["position"])
+            department_id = int(request.form["department"])
+        except (ValueError, KeyError):
+            position_id = 0
+            department_id = 0
 
-        form_data = dict(full_name=full_name, position=position,
-                         department=department, email=email, phone=phone)
-        errors = validate_form(full_name, position, department, email, phone)
+        form_data = dict(full_name=full_name, position_id=position_id,
+                         department_id=department_id, email=email, phone=phone)
+        errors = validate_form(full_name, position_id, department_id, email, phone)
 
         if not errors:
             result = stub.UpdateEmployee(employees_pb2.UpdateEmployeeRequest(
-                id=employee_id, full_name=full_name, position=position,
-                department=department, email=email, phone=phone,
+                id=employee_id, full_name=full_name, position_id=position_id,
+                department_id=department_id, email=email, phone=phone,
             ))
             if result.success:
                 flash(f"Данные сотрудника «{full_name}» обновлены.", "success")
@@ -253,8 +263,11 @@ def position_edit(id):
 
 @app.route("/positions/<int:id>/delete", methods=["POST"])
 def position_delete(id):
-    stub.DeletePosition(employees_pb2.DeletePositionRequest(id=id))
-    flash("Должность удалена.", "success")
+    result = stub.DeletePosition(employees_pb2.DeletePositionRequest(id=id))
+    if result.success:
+        flash("Должность удалена.", "success")
+    elif result.error == "in_use":
+        flash("Невозможно удалить должность: она используется сотрудниками.", "error")
     return redirect(url_for("positions"))
 
 
@@ -310,8 +323,11 @@ def department_edit(id):
 
 @app.route("/departments/<int:id>/delete", methods=["POST"])
 def department_delete(id):
-    stub.DeleteDepartment(employees_pb2.DeleteDepartmentRequest(id=id))
-    flash("Отдел удалён.", "success")
+    result = stub.DeleteDepartment(employees_pb2.DeleteDepartmentRequest(id=id))
+    if result.success:
+        flash("Отдел удалён.", "success")
+    elif result.error == "in_use":
+        flash("Невозможно удалить отдел: он используется сотрудниками.", "error")
     return redirect(url_for("departments"))
 
 
