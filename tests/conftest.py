@@ -1,6 +1,7 @@
 import concurrent.futures
 import threading
 
+import allure
 import grpc
 import pytest
 from faker import Faker
@@ -13,6 +14,25 @@ import app as flask_app_module
 from app import app as flask_app
 
 fake = Faker("ru_RU")
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    # сохраняем результат каждой фазы на item — фикстура pw_page читает rep_call в teardown
+    setattr(item, f"rep_{rep.when}", rep)
+
+    if rep.when == "call" and rep.failed:
+        pw_page = item.funcargs.get("pw_page")
+        if pw_page is not None:
+            page, _ = pw_page
+            screenshot = page.screenshot()
+            allure.attach(
+                screenshot,
+                name="screenshot on failure",
+                attachment_type=allure.attachment_type.PNG,
+            )
 
 
 @pytest.fixture(autouse=True)
@@ -56,13 +76,33 @@ def live_server(setup_db):
 
 
 @pytest.fixture
-def pw_page(live_server):
-    """Открывает браузер Chromium и возвращает (page, base_url)."""
+def pw_page(live_server, request):
+    """Открывает браузер Chromium и возвращает (page, base_url).
+    При падении теста сохраняет Playwright trace в Allure."""
+    import tempfile
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
+        context = browser.new_context()
+        context.tracing.start(screenshots=True, snapshots=True)
+        page = context.new_page()
         yield page, live_server
+
+        rep_call = getattr(request.node, "rep_call", None)
+        if rep_call and rep_call.failed:
+            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
+                trace_path = f.name
+            context.tracing.stop(path=trace_path)
+            with open(trace_path, "rb") as f:
+                allure.attach(
+                    f.read(),
+                    name="playwright-trace.zip",
+                    attachment_type="application/zip",
+                    extension="zip",
+                )
+        else:
+            context.tracing.stop()
+
         browser.close()
 
 

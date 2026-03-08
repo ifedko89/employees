@@ -27,6 +27,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Write Allure environment info
+        run: |
+          mkdir -p allure-results
+          cat > allure-results/environment.properties << EOF
+          Python=$(python --version | cut -d' ' -f2)
+          Flask=$(pip show flask | grep ^Version | cut -d' ' -f2)
+          DB=PostgreSQL
+          EOF
+
       - name: Run tests
         run: |
           PG_CTL=$(find /usr/lib/postgresql -name pg_ctl | sort -V | tail -1)
@@ -91,12 +100,23 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
 
+      - name: Write Allure environment info
+        run: |
+          mkdir -p allure-results-ui
+          cat > allure-results-ui/environment.properties << EOF
+          Python=$(python --version | cut -d' ' -f2)
+          Flask=$(pip show flask | grep ^Version | cut -d' ' -f2)
+          Browser=Chromium
+          DB=PostgreSQL
+          EOF
+
       - name: Run UI tests
         run: |
           PG_CTL=$(find /usr/lib/postgresql -name pg_ctl | sort -V | tail -1)
           pytest tests/test_ui.py \
             --postgresql-exec="$PG_CTL" \
             -n auto \
+            --reruns 2 --reruns-delay 1 \
             --alluredir=allure-results-ui \
             --junitxml=junit-ui.xml
 

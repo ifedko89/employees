@@ -2,6 +2,8 @@ import pytest
 import allure
 import database
 
+pytestmark = [pytest.mark.db]
+
 
 @allure.feature("База данных")
 @allure.story("CRUD")
@@ -197,7 +199,7 @@ def test_position_update():
 @allure.story("Справочник должностей")
 @allure.title("Обновление должности на null")
 @allure.severity(allure.severity_level.CRITICAL)
-def test_position_update():
+def test_position_null_update():
     with allure.step("Создать должность"):
         database.create_position("Тестировщик")
         items = database.get_all_positions()

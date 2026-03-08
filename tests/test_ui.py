@@ -4,6 +4,9 @@ import pytest
 import allure
 
 import database
+from reference_helper import ReferenceHelper
+
+pytestmark = [pytest.mark.ui]
 
 
 # ── Главная страница ────────────────────────────────────────────────────────
@@ -18,6 +21,8 @@ def test_ui_index_empty(pw_page):
         page.goto(base + "/")
     with allure.step("Текст пустого состояния виден"):
         assert "Сотрудников пока нет" in page.content()
+        assert "Сотрудники" in page.content()
+        assert "+ Добавить" in page.content()
 
 
 @allure.feature("UI")
@@ -36,6 +41,7 @@ def test_ui_index_shows_employee(pw_page, make_employee):
 
 # ── Создание сотрудника ─────────────────────────────────────────────────────
 
+@pytest.mark.smoke
 @allure.feature("UI")
 @allure.story("Создание сотрудника")
 @allure.title("Успешное создание через форму")
@@ -117,6 +123,7 @@ def test_ui_edit_form_prefilled(pw_page, make_employee):
         assert value == "Борис Смирнов"
 
 
+@pytest.mark.smoke
 @allure.feature("UI")
 @allure.story("Редактирование сотрудника")
 @allure.title("Успешное обновление данных через форму")
@@ -130,7 +137,6 @@ def test_ui_edit_employee(pw_page, make_employee):
     with allure.step("Открыть форму редактирования"):
         page.goto(base + f"/edit/{emp['id']}")
     with allure.step("Изменить имя и должность"):
-        page.fill('[name="full_name"]', "")
         page.fill('[name="full_name"]', "Пётр Петров")
         page.select_option('[name="position"]', str(new_pos_id))
     with allure.step("Сохранить"):
@@ -143,6 +149,7 @@ def test_ui_edit_employee(pw_page, make_employee):
 
 # ── Удаление ────────────────────────────────────────────────────────────────
 
+@pytest.mark.smoke
 @allure.feature("UI")
 @allure.story("Удаление сотрудника")
 @allure.title("Удаление через кнопку с подтверждением")
@@ -211,14 +218,13 @@ def test_ui_filter_by_department(pw_page, make_employee):
 @allure.severity(allure.severity_level.CRITICAL)
 def test_ui_positions_create(pw_page):
     page, base = pw_page
+    ref = ReferenceHelper(page, base, "/positions")
     with allure.step("Открыть /positions"):
-        page.goto(base + "/positions")
+        ref.open()
     with allure.step("Ввести название и нажать Добавить"):
-        page.fill('[name="name"]', "DevOps-инженер")
-        page.click('button[type="submit"]')
+        ref.add("DevOps-инженер")
     with allure.step("Должность появилась в списке"):
-        page.wait_for_url(base + "/positions")
-        assert "DevOps-инженер" in page.content()
+        assert "DevOps-инженер" in ref.items()
 
 
 @allure.feature("UI")
@@ -227,19 +233,16 @@ def test_ui_positions_create(pw_page):
 @allure.severity(allure.severity_level.CRITICAL)
 def test_ui_positions_edit(pw_page):
     page, base = pw_page
+    ref = ReferenceHelper(page, base, "/positions")
     with allure.step("Создать должность в БД"):
         database.create_position("Стажёр")
-        pos = database.get_all_positions()[0]
-    with allure.step("Нажать Изменить для должности"):
-        page.goto(base + "/positions")
-        page.click('a.btn-act[href*="edit"]')
-    with allure.step("Изменить название и сохранить"):
-        page.fill('[name="name"]', "")
-        page.fill('[name="name"]', "Специалист")
-        page.click('button[type="submit"]')
+    with allure.step("Открыть /positions и нажать Изменить"):
+        ref.open()
+        ref.edit_first("Специалист")
     with allure.step("Обновлённое название в списке"):
-        assert "Специалист" in page.content()
-        assert "Стажёр" not in page.content()
+        items = ref.items()
+        assert "Специалист" in items
+        assert "Стажёр" not in items
 
 
 @allure.feature("UI")
@@ -248,14 +251,29 @@ def test_ui_positions_edit(pw_page):
 @allure.severity(allure.severity_level.CRITICAL)
 def test_ui_positions_delete(pw_page):
     page, base = pw_page
+    ref = ReferenceHelper(page, base, "/positions")
     with allure.step("Создать должность в БД"):
         database.create_position("Временная")
-    with allure.step("Нажать Удалить и подтвердить"):
-        page.goto(base + "/positions")
-        page.on("dialog", lambda d: d.accept())
-        page.click('button.btn-act.danger')
+    with allure.step("Открыть /positions и удалить"):
+        ref.open()
+        ref.delete_first()
     with allure.step("Должность исчезла из списка"):
-        assert "Временная" not in page.content()
+        assert "Временная" not in ref.items()
+
+@allure.feature("UI")
+@allure.story("Справочник должностей")
+@allure.title("Удаление используемой должностиДо")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_ui_positions_delete(pw_page):
+    page, base = pw_page
+    ref = ReferenceHelper(page, base, "/positions")
+    with allure.step("Создать должность в БД"):
+        database.create_position("Временная")
+    with allure.step("Открыть /positions и удалить"):
+        ref.open()
+        ref.delete_first()
+    with allure.step("Должность исчезла из списка"):
+        assert "Временная" not in ref.items()
 
 
 # ── Справочник отделов ──────────────────────────────────────────────────────
@@ -266,14 +284,13 @@ def test_ui_positions_delete(pw_page):
 @allure.severity(allure.severity_level.CRITICAL)
 def test_ui_departments_create(pw_page):
     page, base = pw_page
+    ref = ReferenceHelper(page, base, "/departments")
     with allure.step("Открыть /departments"):
-        page.goto(base + "/departments")
+        ref.open()
     with allure.step("Ввести название и нажать Добавить"):
-        page.fill('[name="name"]', "Маркетинг")
-        page.click('button[type="submit"]')
+        ref.add("Маркетинг")
     with allure.step("Отдел появился в списке"):
-        page.wait_for_url(base + "/departments")
-        assert "Маркетинг" in page.content()
+        assert "Маркетинг" in ref.items()
 
 
 @allure.feature("UI")
@@ -282,14 +299,33 @@ def test_ui_departments_create(pw_page):
 @allure.severity(allure.severity_level.CRITICAL)
 def test_ui_departments_delete(pw_page):
     page, base = pw_page
+    ref = ReferenceHelper(page, base, "/departments")
     with allure.step("Создать отдел в БД"):
         database.create_department("Временный отдел")
-    with allure.step("Нажать Удалить и подтвердить"):
-        page.goto(base + "/departments")
-        page.on("dialog", lambda d: d.accept())
-        page.click('button.btn-act.danger')
+    with allure.step("Открыть /departments и удалить"):
+        ref.open()
+        ref.delete_first()
     with allure.step("Отдел исчез из списка"):
-        assert "Временный отдел" not in page.content()
+        assert "Временный отдел" not in ref.items()
+
+
+# ── Негативные сценарии справочников ────────────────────────────────────────
+
+@allure.feature("UI")
+@allure.story("Справочник должностей")
+@allure.title("Нельзя удалить должность, используемую сотрудником")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_ui_positions_delete_in_use(pw_page, make_employee):
+    page, base = pw_page
+    with allure.step("Создать сотрудника с должностью 'Разработчик'"):
+        make_employee("Иван Иванов", "Разработчик", "ИТ-отдел")
+    with allure.step("Открыть справочник должностей и попытаться удалить"):
+        ref = ReferenceHelper(page, base, "/positions")
+        ref.open()
+        ref.delete_first()
+    with allure.step("Должность осталась в списке, flash-ошибка видна"):
+        assert "Разработчик" in ref.items()
+        assert "используется" in page.content()
 
 
 # ── Навигация ───────────────────────────────────────────────────────────────
@@ -307,3 +343,67 @@ def test_ui_nav_add_button(pw_page):
     with allure.step("Открылась форма создания"):
         page.wait_for_url(base + "/create")
         assert "Новый сотрудник" in page.content()
+
+
+# ── История изменений ────────────────────────────────────────────────────────
+
+@allure.feature("UI")
+@allure.story("История изменений")
+@allure.title("Страница истории открывается для существующего сотрудника")
+@allure.severity(allure.severity_level.NORMAL)
+def test_ui_history_page_opens(pw_page, make_employee):
+    page, base = pw_page
+    with allure.step("Создать сотрудника"):
+        emp = make_employee("Олег Сидоров", "Аналитик", "ИТ-отдел")
+    with allure.step("Открыть главную и перейти в историю"):
+        page.goto(base + "/")
+        page.click("a.btn-act.history")
+    with allure.step("Страница истории открылась, имя сотрудника присутствует"):
+        page.wait_for_url(f"{base}/history/{emp['id']}")
+        assert "История изменений" in page.content()
+        assert emp["full_name"] in page.content()
+
+
+@pytest.mark.smoke
+@allure.feature("UI")
+@allure.story("История изменений")
+@allure.title("После создания через UI в истории есть запись «Создание»")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_ui_history_create_event(pw_page):
+    page, base = pw_page
+    with allure.step("Создать должность и отдел"):
+        pos_id = database.get_or_create_position("Разработчик")
+        dept_id = database.get_or_create_department("ИТ-отдел")
+    with allure.step("Создать сотрудника через форму"):
+        page.goto(base + "/create")
+        page.fill('[name="full_name"]', "Иван Иванов")
+        page.select_option('[name="position"]', str(pos_id))
+        page.select_option('[name="department"]', str(dept_id))
+        page.fill('[name="email"]', "ivan@test.com")
+        page.click('button[type="submit"]')
+        page.wait_for_url(base + "/")
+    with allure.step("Перейти в историю сотрудника"):
+        page.click("a.btn-act.history")
+    with allure.step("В истории есть запись о создании"):
+        assert "Создание" in page.content()
+
+
+@allure.feature("UI")
+@allure.story("История изменений")
+@allure.title("После редактирования через UI в истории есть запись «Изменение»")
+@allure.severity(allure.severity_level.NORMAL)
+def test_ui_history_update_event(pw_page, make_employee):
+    page, base = pw_page
+    with allure.step("Создать сотрудника"):
+        emp = make_employee()
+        new_pos_id = database.get_or_create_position("Архитектор")
+    with allure.step("Отредактировать сотрудника через форму"):
+        page.goto(base + f"/edit/{emp['id']}")
+        page.fill('[name="full_name"]', "Пётр Петров")
+        page.select_option('[name="position"]', str(new_pos_id))
+        page.click('button[type="submit"]')
+        page.wait_for_url(base + "/")
+    with allure.step("Перейти в историю сотрудника"):
+        page.click("a.btn-act.history")
+    with allure.step("В истории есть запись об изменении"):
+        assert "Изменение" in page.content()
