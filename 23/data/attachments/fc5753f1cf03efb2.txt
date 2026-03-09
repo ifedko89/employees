@@ -1,0 +1,4 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:02:49] "GET /positions HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:02:49] "GET /positions?edit=1 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:02:49] "[32mPOST /positions/1/edit HTTP/1.1[0m" 302 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:02:49] "GET /positions HTTP/1.1" 200 -
