@@ -2,6 +2,8 @@ import pytest
 import allure
 import database
 
+pytestmark = [pytest.mark.routes]
+
 
 @allure.feature("HTTP-маршруты")
 @allure.story("Список сотрудников")
@@ -439,3 +441,33 @@ def test_create_duplicate_email(client):
 
     with allure.step("В БД по-прежнему один сотрудник"):
         assert len(database.get_all()) == 1
+
+
+# ── История изменений ────────────────────────────────────────────────────────
+
+@allure.feature("HTTP-маршруты")
+@allure.story("История изменений")
+@allure.title("GET /history/<id> — существующий сотрудник → 200 и имя в HTML")
+@allure.severity(allure.severity_level.NORMAL)
+def test_history_get_existing(client, make_employee):
+    with allure.step("Создать сотрудника в БД"):
+        emp = make_employee()
+    with allure.step(f"GET /history/<id>"):
+        resp = client.get(f"/history/{emp['id']}")
+    with allure.step("Ответ 200"):
+        assert resp.status_code == 200
+    with allure.step("Имя сотрудника и заголовок страницы присутствуют в HTML"):
+        html = resp.data.decode()
+        assert emp["full_name"] in html
+        assert "История изменений" in html
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("История изменений")
+@allure.title("GET /history/999 — несуществующий ID → 302 редирект на главную")
+@allure.severity(allure.severity_level.NORMAL)
+def test_history_get_nonexistent(client):
+    with allure.step("GET /history/999 (сотрудник не существует)"):
+        resp = client.get("/history/999")
+    with allure.step("Редирект 302 на главную"):
+        assert resp.status_code == 302
