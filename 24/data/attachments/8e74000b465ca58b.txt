@@ -1,0 +1,2 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:13:07] "GET / HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [09/Mar/2026 09:13:08] "GET /history/1 HTTP/1.1" 200 -
