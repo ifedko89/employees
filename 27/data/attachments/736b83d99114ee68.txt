@@ -1,0 +1,2 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:31] "GET / HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:31] "GET /?sort=full_name&order=asc&q=Иван&dept= HTTP/1.1" 200 -

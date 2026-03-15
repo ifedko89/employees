@@ -1,0 +1,2 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:28] "GET /create HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:28] "POST /create HTTP/1.1" 200 -

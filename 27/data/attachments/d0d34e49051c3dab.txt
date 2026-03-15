@@ -1,0 +1,4 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:39] "GET /edit/1 HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:39] "[32mPOST /edit/1 HTTP/1.1[0m" 302 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:39] "GET / HTTP/1.1" 200 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [15/Mar/2026 13:11:39] "GET /history/1 HTTP/1.1" 200 -
