@@ -46,14 +46,17 @@ def _row_to_position(row) -> employees_pb2.Position:
 class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
 
     def ListEmployees(self, request, context):
-        rows = database.get_all(
+        result = database.get_all(
             search=request.search,
             sort=request.sort or "full_name",
             order=request.order or "asc",
             dept=request.dept,
+            limit=request.limit,
+            offset=request.offset,
         )
         return employees_pb2.ListEmployeesResponse(
-            employees=[_row_to_employee(r) for r in rows]
+            employees=[_row_to_employee(r) for r in result["rows"]],
+            total=result["total"],
         )
 
     def GetEmployee(self, request, context):

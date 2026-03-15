@@ -2,7 +2,7 @@ import os
 import re
 
 import grpc
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 
 import employees_pb2
 import employees_pb2_grpc
@@ -81,6 +81,9 @@ def _pos_to_dict(pos):
     return {"id": pos.id, "name": pos.name}
 
 
+PAGE_SIZE = 200
+
+
 @app.route("/")
 def index():
     query = request.args.get("q", "").strip()
@@ -89,16 +92,32 @@ def index():
     dept = request.args.get("dept", "")
     resp = stub.ListEmployees(employees_pb2.ListEmployeesRequest(
         search=query, sort=sort, order=order, dept=dept,
+        limit=PAGE_SIZE, offset=0,
     ))
     employees = [_emp_to_dict(e) for e in resp.employees]
     dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
     departments = [d.name for d in dept_resp.departments]
     return render_template(
         "index.html",
-        employees=employees, query=query,
+        employees=employees, total=resp.total, query=query,
         sort=sort, order=order, dept=dept,
-        departments=departments,
+        departments=departments, page_size=PAGE_SIZE,
     )
+
+
+@app.route("/api/employees")
+def api_employees():
+    query = request.args.get("q", "").strip()
+    sort = request.args.get("sort", "full_name")
+    order = request.args.get("order", "asc")
+    dept = request.args.get("dept", "")
+    offset = request.args.get("offset", 0, type=int)
+    resp = stub.ListEmployees(employees_pb2.ListEmployeesRequest(
+        search=query, sort=sort, order=order, dept=dept,
+        limit=PAGE_SIZE, offset=offset,
+    ))
+    employees = [_emp_to_dict(e) for e in resp.employees]
+    return jsonify(employees=employees, total=resp.total)
 
 
 @app.route("/create", methods=["GET", "POST"])

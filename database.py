@@ -1,8 +1,69 @@
 import os
+import random
 import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
 from datetime import datetime, timezone
+
+_LAST_NAMES = [
+    "Иванов", "Петров", "Сидоров", "Кузнецов", "Смирнов",
+    "Попов", "Волков", "Козлов", "Новиков", "Морозов",
+    "Соловьёв", "Васильев", "Зайцев", "Павлов", "Семёнов",
+    "Голубев", "Виноградов", "Богданов", "Воробьёв", "Фёдоров",
+    "Михайлов", "Беляев", "Тарасов", "Белов", "Комаров",
+    "Орлов", "Киселёв", "Макаров", "Андреев", "Ковалёв",
+]
+
+_FIRST_NAMES_M = [
+    "Александр", "Дмитрий", "Максим", "Сергей", "Андрей",
+    "Алексей", "Артём", "Илья", "Кирилл", "Михаил",
+    "Никита", "Матвей", "Роман", "Егор", "Иван",
+]
+
+_FIRST_NAMES_F = [
+    "Анна", "Мария", "Елена", "Ольга", "Наталья",
+    "Татьяна", "Ирина", "Светлана", "Екатерина", "Юлия",
+    "Дарья", "Алина", "Виктория", "Полина", "Ксения",
+]
+
+_PATRONYMICS_M = [
+    "Александрович", "Дмитриевич", "Сергеевич", "Андреевич", "Алексеевич",
+    "Михайлович", "Иванович", "Николаевич", "Владимирович", "Петрович",
+    "Олегович", "Павлович", "Юрьевич", "Викторович", "Евгеньевич",
+]
+
+_PATRONYMICS_F = [
+    "Александровна", "Дмитриевна", "Сергеевна", "Андреевна", "Алексеевна",
+    "Михайловна", "Ивановна", "Николаевна", "Владимировна", "Петровна",
+    "Олеговна", "Павловна", "Юрьевна", "Викторовна", "Евгеньевна",
+]
+
+_SEED_POSITIONS = [
+    "Разработчик", "Аналитик", "Менеджер", "Тестировщик", "Дизайнер",
+    "DevOps-инженер", "Системный администратор", "Бизнес-аналитик",
+    "Руководитель проекта", "Технический писатель",
+]
+
+_SEED_DEPARTMENTS = [
+    "IT", "Бухгалтерия", "HR", "Маркетинг", "Продажи",
+    "Логистика", "Юридический", "Техподдержка",
+]
+
+_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+
+def _transliterate(text: str) -> str:
+    result = []
+    for ch in text.lower():
+        result.append(_TRANSLIT.get(ch, ch))
+    return "".join(result)
+
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -142,6 +203,75 @@ def init_db():
             END $$
         """)
 
+        _seed_employees(cur)
+
+
+def _seed_employees(cur):
+    cur.execute("SELECT COUNT(*) AS cnt FROM employees")
+    if cur.fetchone()["cnt"] > 0:
+        return
+
+    for name in _SEED_POSITIONS:
+        cur.execute(
+            "INSERT INTO positions (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+            (name,),
+        )
+    for name in _SEED_DEPARTMENTS:
+        cur.execute(
+            "INSERT INTO departments (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+            (name,),
+        )
+
+    cur.execute("SELECT id, name FROM positions")
+    positions = [(r["id"], r["name"]) for r in cur.fetchall()]
+    cur.execute("SELECT id, name FROM departments")
+    departments = [(r["id"], r["name"]) for r in cur.fetchall()]
+
+    now = datetime.now(timezone.utc).isoformat()
+    employees_data = []
+    history_data = []
+
+    for i in range(1, 1001):
+        is_male = random.random() < 0.5
+        last_name = random.choice(_LAST_NAMES)
+        if is_male:
+            first_name = random.choice(_FIRST_NAMES_M)
+            patronymic = random.choice(_PATRONYMICS_M)
+        else:
+            last_name_f = last_name + "а" if not last_name.endswith("о") else last_name
+            last_name = last_name_f
+            first_name = random.choice(_FIRST_NAMES_F)
+            patronymic = random.choice(_PATRONYMICS_F)
+
+        full_name = f"{last_name} {first_name} {patronymic}"
+        pos_id, pos_name = random.choice(positions)
+        dept_id, dept_name = random.choice(departments)
+        email = f"{_transliterate(last_name)}{i}@example.com"
+        phone = "+7 9{:02d} {:03d}-{:02d}-{:02d}".format(
+            random.randint(0, 99),
+            random.randint(0, 999),
+            random.randint(0, 99),
+            random.randint(0, 99),
+        )
+        employees_data.append((full_name, pos_id, dept_id, email, phone, now, now))
+
+    cur.executemany(
+        "INSERT INTO employees (full_name, position_id, department_id, email, phone, created_at, updated_at)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        employees_data,
+    )
+
+    cur.execute("SELECT id FROM employees ORDER BY id")
+    emp_ids = [r["id"] for r in cur.fetchall()]
+    for emp_id in emp_ids:
+        history_data.append((emp_id, now, "create"))
+
+    cur.executemany(
+        "INSERT INTO employee_history (employee_id, changed_at, change_type)"
+        " VALUES (%s, %s, %s)",
+        history_data,
+    )
+
 
 _ALLOWED_SORT = {"full_name", "position", "department"}
 
@@ -163,7 +293,8 @@ _EMPLOYEE_SELECT = """
 
 
 def get_all(search: str = "", sort: str = "full_name",
-            order: str = "asc", dept: str = "") -> list:
+            order: str = "asc", dept: str = "",
+            limit: int = 0, offset: int = 0) -> dict:
     if sort not in _ALLOWED_SORT:
         sort = "full_name"
     order_sql = "ASC" if order != "desc" else "DESC"
@@ -181,10 +312,21 @@ def get_all(search: str = "", sort: str = "full_name",
         params.append(dept)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    sql = f"{_EMPLOYEE_SELECT} {where} ORDER BY {sort_col} {order_sql}"
+
     with _cursor() as cur:
+        cur.execute(
+            f"SELECT COUNT(*) AS cnt FROM employees e "
+            f"JOIN positions p ON p.id = e.position_id "
+            f"JOIN departments d ON d.id = e.department_id {where}",
+            params,
+        )
+        total = cur.fetchone()["cnt"]
+
+        sql = f"{_EMPLOYEE_SELECT} {where} ORDER BY {sort_col} {order_sql}"
+        if limit > 0:
+            sql += f" LIMIT {int(limit)} OFFSET {int(offset)}"
         cur.execute(sql, params)
-        return cur.fetchall()
+        return {"rows": cur.fetchall(), "total": total}
 
 
 def get_departments() -> list:
