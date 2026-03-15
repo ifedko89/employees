@@ -40,6 +40,7 @@ def setup_db(postgresql, monkeypatch):
     info = postgresql.info
     dsn = f"postgresql://{info.user}@{info.host}:{info.port}/{info.dbname}"
     monkeypatch.setattr(database, "DATABASE_URL", dsn)
+    monkeypatch.setattr(database, "_seed_employees", lambda cur: None)
     database.init_db()
 
     server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2))

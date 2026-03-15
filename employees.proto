@@ -66,10 +66,13 @@ message ListEmployeesRequest {
     string sort = 2;
     string order = 3;
     string dept = 4;
+    int32 limit = 5;
+    int32 offset = 6;
 }
 
 message ListEmployeesResponse {
     repeated Employee employees = 1;
+    int32 total = 2;
 }
 
 message GetEmployeeRequest {

@@ -78,7 +78,7 @@ def test_create_post_valid(client):
     with allure.step("Редирект 302"):
         assert resp.status_code == 302
     with allure.step("Запись появилась в БД"):
-        assert len(database.get_all()) == 1
+        assert database.get_all()["total"] == 1
 
 
 @allure.feature("HTTP-маршруты")
@@ -440,7 +440,110 @@ def test_create_duplicate_email(client):
         assert "уже существует" in resp.data.decode()
 
     with allure.step("В БД по-прежнему один сотрудник"):
-        assert len(database.get_all()) == 1
+        assert database.get_all()["total"] == 1
+
+
+# ── Пагинация ────────────────────────────────────────────────────────────────
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Пагинация")
+@allure.title("GET /api/employees — возвращает JSON с employees и total")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_api_employees_returns_json(client, make_employee):
+    with allure.step("Создать сотрудника"):
+        make_employee()
+    with allure.step("GET /api/employees"):
+        resp = client.get("/api/employees")
+    with allure.step("Ответ 200, JSON содержит employees и total"):
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "employees" in data
+        assert "total" in data
+        assert data["total"] == 1
+        assert len(data["employees"]) == 1
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Пагинация")
+@allure.title("GET /api/employees — offset за пределами данных → пустой список")
+@allure.severity(allure.severity_level.NORMAL)
+def test_api_employees_offset_beyond(client, make_employee):
+    with allure.step("Создать сотрудника"):
+        make_employee()
+    with allure.step("GET /api/employees?offset=9999"):
+        resp = client.get("/api/employees?offset=9999")
+    with allure.step("Ответ 200, employees пуст, total корректен"):
+        data = resp.get_json()
+        assert data["employees"] == []
+        assert data["total"] == 1
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Пагинация")
+@allure.title("GET /api/employees — offset разбивает записи на страницы без пересечений")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_api_employees_pages_no_overlap(client, make_employee, monkeypatch):
+    with allure.step("Создать 5 сотрудников"):
+        for i in range(5):
+            make_employee(
+                full_name=f"Сотрудник {i:03d}",
+                email=f"emp{i}@test.com",
+            )
+    with allure.step("Установить PAGE_SIZE = 2"):
+        import app as app_module
+        monkeypatch.setattr(app_module, "PAGE_SIZE", 2)
+    with allure.step("Загрузить 3 страницы"):
+        p1 = client.get("/api/employees?offset=0").get_json()
+        p2 = client.get("/api/employees?offset=2").get_json()
+        p3 = client.get("/api/employees?offset=4").get_json()
+    with allure.step("total одинаковый на всех страницах"):
+        assert p1["total"] == p2["total"] == p3["total"] == 5
+    with allure.step("Каждая страница ≤ 2 записей"):
+        assert len(p1["employees"]) == 2
+        assert len(p2["employees"]) == 2
+        assert len(p3["employees"]) == 1
+    with allure.step("ID не пересекаются"):
+        ids1 = {e["id"] for e in p1["employees"]}
+        ids2 = {e["id"] for e in p2["employees"]}
+        ids3 = {e["id"] for e in p3["employees"]}
+        assert ids1.isdisjoint(ids2)
+        assert ids1.isdisjoint(ids3)
+        assert ids2.isdisjoint(ids3)
+    with allure.step("Все записи покрыты"):
+        assert len(ids1 | ids2 | ids3) == 5
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Пагинация")
+@allure.title("GET /api/employees — фильтр + пагинация: total соответствует фильтру")
+@allure.severity(allure.severity_level.CRITICAL)
+def test_api_employees_filter_with_pagination(client, make_employee):
+    with allure.step("Создать сотрудников из разных отделов"):
+        make_employee("Иван Иванов", "Разработчик", "ИТ-отдел", "ivan@test.com")
+        make_employee("Пётр Петров", "Менеджер", "Кадры", "petr@test.com")
+        make_employee("Анна Сидорова", "Аналитик", "ИТ-отдел", "anna@test.com")
+    with allure.step("GET /api/employees?dept=ИТ-отдел"):
+        data = client.get("/api/employees?dept=ИТ-отдел").get_json()
+    with allure.step("total = 2, только сотрудники ИТ-отдела"):
+        assert data["total"] == 2
+        names = {e["full_name"] for e in data["employees"]}
+        assert "Пётр Петров" not in names
+
+
+@allure.feature("HTTP-маршруты")
+@allure.story("Пагинация")
+@allure.title("GET / — главная передаёт total и page_size в шаблон")
+@allure.severity(allure.severity_level.NORMAL)
+def test_index_has_total_and_page_size(client, make_employee):
+    with allure.step("Создать сотрудника"):
+        make_employee()
+    with allure.step("GET /"):
+        resp = client.get("/")
+        html = resp.data.decode()
+    with allure.step("HTML содержит total-count и переменные пагинации"):
+        assert 'id="total-count"' in html
+        assert "var total = 1" in html or "var total = 1;" in html
 
 
 # ── История изменений ────────────────────────────────────────────────────────
