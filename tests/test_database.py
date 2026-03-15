@@ -62,8 +62,8 @@ def test_get_all_no_filter(make_employee):
         make_employee("А Аааов", "Разработчик", "ИТ")
         make_employee("Б Бббов", "Менеджер", "HR")
     with allure.step("Получить всех и проверить количество"):
-        rows = database.get_all()
-        assert len(rows) == 2
+        result = database.get_all()
+        assert result["total"] == 2
 
 
 @allure.feature("База данных")
@@ -80,10 +80,10 @@ def test_get_all_search(make_employee, search, expected_name):
         make_employee("Иван Иванов", "Разработчик", "ИТ")
         make_employee("Пётр Петров", "Менеджер", "HR")
     with allure.step(f"Поиск по запросу '{search}'"):
-        rows = database.get_all(search=search)
+        result = database.get_all(search=search)
     with allure.step("Проверить что найден ровно один подходящий сотрудник"):
-        assert len(rows) == 1
-        assert rows[0]["full_name"] == expected_name
+        assert result["total"] == 1
+        assert result["rows"][0]["full_name"] == expected_name
 
 
 @allure.feature("База данных")
@@ -95,10 +95,10 @@ def test_get_all_filter_by_dept(make_employee):
         make_employee("Иван Иванов", "Разработчик", "ИТ")
         make_employee("Пётр Петров", "Менеджер", "HR")
     with allure.step("Отфильтровать по отделу ИТ"):
-        rows = database.get_all(dept="ИТ")
+        result = database.get_all(dept="ИТ")
     with allure.step("Проверить что возвращён только сотрудник из ИТ"):
-        assert len(rows) == 1
-        assert rows[0]["department"] == "ИТ"
+        assert result["total"] == 1
+        assert result["rows"][0]["department"] == "ИТ"
 
 
 @allure.feature("База данных")
@@ -114,9 +114,9 @@ def test_get_all_sort_and_order(make_employee, order, expected_first):
         make_employee("Б Бббов", "Разработчик", "ИТ")
         make_employee("А Аааов", "Менеджер", "HR")
     with allure.step(f"Получить список с order={order}"):
-        rows = database.get_all(sort="full_name", order=order)
+        result = database.get_all(sort="full_name", order=order)
     with allure.step(f"Первый в списке должен быть '{expected_first}'"):
-        assert rows[0]["full_name"] == expected_first
+        assert result["rows"][0]["full_name"] == expected_first
 
 
 @allure.feature("База данных")
@@ -127,9 +127,9 @@ def test_get_all_invalid_sort(make_employee):
     with allure.step("Создать сотрудника"):
         make_employee()
     with allure.step("Запросить с невалидным полем сортировки"):
-        rows = database.get_all(sort="invalid_field")
+        result = database.get_all(sort="invalid_field")
     with allure.step("Запрос не упал, данные возвращены"):
-        assert len(rows) == 1
+        assert result["total"] == 1
 
 
 @allure.feature("База данных")
