@@ -17,6 +17,8 @@ services:
     command: python grpc_server.py
     environment:
       - DATABASE_URL=postgresql://employees:employees@postgres:5432/employees
+    expose:
+      - "9091"
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,5 +32,33 @@ services:
     depends_on:
       - grpc
 
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - web
+      - grpc
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./monitoring/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   db_data:
+  prometheus_data:
+  grafana_data:

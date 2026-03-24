@@ -32,5 +32,10 @@ allure-report-classic/
 .idea/
 .vscode/
 
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+static/dist/
+
 # macOS
 .DS_Store

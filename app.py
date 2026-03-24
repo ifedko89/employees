@@ -1,14 +1,36 @@
 import os
 import re
+import time
 
 import grpc
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, request, jsonify, send_from_directory, Response
+from prometheus_client import (
+    Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST,
+)
 
 import employees_pb2
 import employees_pb2_grpc
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^\+?[\d\s\-()]{7,20}$")
+
+# ── Prometheus metrics ───────────────────────────────────────────────────────
+
+REQUEST_COUNT = Counter(
+    "flask_http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"],
+)
+REQUEST_LATENCY = Histogram(
+    "flask_http_request_duration_seconds",
+    "HTTP request latency in seconds",
+    ["method", "endpoint"],
+)
+REQUESTS_IN_PROGRESS = Gauge(
+    "flask_http_requests_in_progress",
+    "Number of HTTP requests currently being processed",
+    ["method", "endpoint"],
+)
 
 
 def validate_reference_name(name: str):
@@ -38,12 +60,40 @@ def validate_form(full_name, position_id, department_id, email, phone):
     return errors
 
 
-app = Flask(__name__)
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static", "dist")
+
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 app.secret_key = "dev-secret-key-change-in-production"
 
 GRPC_HOST = os.environ.get("GRPC_HOST", "localhost:50051")
 channel = grpc.insecure_channel(GRPC_HOST)
 stub = employees_pb2_grpc.EmployeesServiceStub(channel)
+
+
+@app.before_request
+def _start_timer():
+    request._prom_start = time.perf_counter()
+    endpoint = request.endpoint or "unknown"
+    REQUESTS_IN_PROGRESS.labels(method=request.method, endpoint=endpoint).inc()
+
+
+@app.after_request
+def _record_metrics(response):
+    endpoint = request.endpoint or "unknown"
+    if endpoint == "metrics":
+        return response
+    elapsed = time.perf_counter() - getattr(request, "_prom_start", time.perf_counter())
+    REQUEST_LATENCY.labels(method=request.method, endpoint=endpoint).observe(elapsed)
+    REQUEST_COUNT.labels(
+        method=request.method, endpoint=endpoint, status=response.status_code,
+    ).inc()
+    REQUESTS_IN_PROGRESS.labels(method=request.method, endpoint=endpoint).dec()
+    return response
+
+
+@app.route("/metrics")
+def metrics():
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 
 def _emp_to_dict(emp):
@@ -81,8 +131,11 @@ def _pos_to_dict(pos):
     return {"id": pos.id, "name": pos.name}
 
 
-@app.route("/")
-def index():
+# ── Employee API ─────────────────────────────────────────────────────────────
+
+
+@app.route("/api/employees", methods=["GET"])
+def api_list_employees():
     query = request.args.get("q", "").strip()
     sort = request.args.get("sort", "full_name")
     order = request.args.get("order", "asc")
@@ -93,242 +146,213 @@ def index():
     employees = [_emp_to_dict(e) for e in resp.employees]
     dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
     departments = [d.name for d in dept_resp.departments]
-    return render_template(
-        "index.html",
-        employees=employees, query=query,
-        sort=sort, order=order, dept=dept,
-        departments=departments,
-    )
+    return jsonify(employees=employees, departments=departments)
 
 
-@app.route("/create", methods=["GET", "POST"])
-def create():
+@app.route("/api/employees", methods=["POST"])
+def api_create_employee():
+    data = request.get_json(silent=True) or {}
+    full_name = data.get("full_name", "").strip()
+    email = data.get("email", "").strip()
+    phone = data.get("phone", "").strip()
+    try:
+        position_id = int(data.get("position_id", 0))
+        department_id = int(data.get("department_id", 0))
+    except (ValueError, TypeError):
+        position_id = 0
+        department_id = 0
+
+    errors = validate_form(full_name, position_id, department_id, email, phone)
+    if errors:
+        return jsonify(errors=errors), 400
+
+    result = stub.CreateEmployee(employees_pb2.CreateEmployeeRequest(
+        full_name=full_name, position_id=position_id,
+        department_id=department_id, email=email, phone=phone,
+    ))
+    if result.success:
+        return jsonify(success=True, message=f"Сотрудник «{full_name}» добавлен."), 201
+    if result.error == "duplicate_email":
+        return jsonify(errors={"email": "Сотрудник с таким email уже существует."}), 400
+    return jsonify(error="Unexpected error"), 500
+
+
+@app.route("/api/employees/<int:employee_id>", methods=["GET"])
+def api_get_employee(employee_id):
+    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    if not emp_resp.found:
+        return jsonify(error="Сотрудник не найден."), 404
+    employee = _emp_to_dict(emp_resp.employee)
     pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
     positions = [_pos_to_dict(p) for p in pos_resp.positions]
     dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
     departments = [_dept_to_dict(d) for d in dept_resp.departments]
-
-    form_data = {}
-    errors = {}
-
-    if request.method == "POST":
-        full_name = request.form["full_name"].strip()
-        email = request.form.get("email", "").strip()
-        phone = request.form.get("phone", "").strip()
-        try:
-            position_id = int(request.form["position"])
-            department_id = int(request.form["department"])
-        except (ValueError, KeyError):
-            position_id = 0
-            department_id = 0
-
-        form_data = dict(full_name=full_name, position_id=position_id,
-                         department_id=department_id, email=email, phone=phone)
-        errors = validate_form(full_name, position_id, department_id, email, phone)
-
-        if not errors:
-            result = stub.CreateEmployee(employees_pb2.CreateEmployeeRequest(
-                full_name=full_name, position_id=position_id, department_id=department_id,
-                email=email, phone=phone,
-            ))
-            if result.success:
-                flash(f"Сотрудник «{full_name}» добавлен.", "success")
-                return redirect(url_for("index"))
-            elif result.error == "duplicate_email":
-                errors["email"] = "Сотрудник с таким email уже существует."
-
-    return render_template("form.html", action="create", employee=None,
-                           positions=positions, departments=departments,
-                           form_data=form_data, errors=errors)
+    return jsonify(employee=employee, positions=positions, departments=departments)
 
 
-@app.route("/edit/<int:employee_id>", methods=["GET", "POST"])
-def edit(employee_id):
+@app.route("/api/employees/<int:employee_id>", methods=["PUT"])
+def api_update_employee(employee_id):
     emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
     if not emp_resp.found:
-        flash("Сотрудник не найден.", "error")
-        return redirect(url_for("index"))
-    employee = _emp_to_dict(emp_resp.employee)
+        return jsonify(error="Сотрудник не найден."), 404
 
-    pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
-    positions = [_pos_to_dict(p) for p in pos_resp.positions]
-    dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
-    departments = [_dept_to_dict(d) for d in dept_resp.departments]
+    data = request.get_json(silent=True) or {}
+    full_name = data.get("full_name", "").strip()
+    email = data.get("email", "").strip()
+    phone = data.get("phone", "").strip()
+    try:
+        position_id = int(data.get("position_id", 0))
+        department_id = int(data.get("department_id", 0))
+    except (ValueError, TypeError):
+        position_id = 0
+        department_id = 0
 
-    form_data = employee
-    errors = {}
+    errors = validate_form(full_name, position_id, department_id, email, phone)
+    if errors:
+        return jsonify(errors=errors), 400
 
-    if request.method == "POST":
-        full_name = request.form["full_name"].strip()
-        email = request.form.get("email", "").strip()
-        phone = request.form.get("phone", "").strip()
-        try:
-            position_id = int(request.form["position"])
-            department_id = int(request.form["department"])
-        except (ValueError, KeyError):
-            position_id = 0
-            department_id = 0
-
-        form_data = dict(full_name=full_name, position_id=position_id,
-                         department_id=department_id, email=email, phone=phone)
-        errors = validate_form(full_name, position_id, department_id, email, phone)
-
-        if not errors:
-            result = stub.UpdateEmployee(employees_pb2.UpdateEmployeeRequest(
-                id=employee_id, full_name=full_name, position_id=position_id,
-                department_id=department_id, email=email, phone=phone,
-            ))
-            if result.success:
-                flash(f"Данные сотрудника «{full_name}» обновлены.", "success")
-                return redirect(url_for("index"))
-            elif result.error == "duplicate_email":
-                errors["email"] = "Сотрудник с таким email уже существует."
-
-    return render_template("form.html", action="edit", employee=employee,
-                           positions=positions, departments=departments,
-                           form_data=form_data, errors=errors)
+    result = stub.UpdateEmployee(employees_pb2.UpdateEmployeeRequest(
+        id=employee_id, full_name=full_name, position_id=position_id,
+        department_id=department_id, email=email, phone=phone,
+    ))
+    if result.success:
+        return jsonify(success=True, message=f"Данные сотрудника «{full_name}» обновлены.")
+    if result.error == "duplicate_email":
+        return jsonify(errors={"email": "Сотрудник с таким email уже существует."}), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/history/<int:employee_id>")
-def history(employee_id):
+@app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
+def api_delete_employee(employee_id):
     emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
-    if not emp_resp.found:
-        flash("Сотрудник не найден.", "error")
-        return redirect(url_for("index"))
-    employee = _emp_to_dict(emp_resp.employee)
-    hist_resp = stub.GetHistory(employees_pb2.GetHistoryRequest(employee_id=employee_id))
-    records = [_history_to_dict(r) for r in hist_resp.records]
-    return render_template("history.html", employee=employee, records=records)
-
-
-@app.route("/delete/<int:employee_id>", methods=["POST"])
-def delete(employee_id):
-    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    message = ""
     if emp_resp.found:
         employee = _emp_to_dict(emp_resp.employee)
         stub.DeleteEmployee(employees_pb2.DeleteEmployeeRequest(id=employee_id))
-        flash(f"Сотрудник «{employee['full_name']}» удалён.", "success")
-    return redirect(url_for("index"))
+        message = f"Сотрудник «{employee['full_name']}» удалён."
+    return jsonify(success=True, message=message)
 
 
-@app.route("/positions")
-def positions():
+@app.route("/api/employees/<int:employee_id>/history", methods=["GET"])
+def api_employee_history(employee_id):
+    emp_resp = stub.GetEmployee(employees_pb2.GetEmployeeRequest(id=employee_id))
+    if not emp_resp.found:
+        return jsonify(error="Сотрудник не найден."), 404
+    employee = _emp_to_dict(emp_resp.employee)
+    hist_resp = stub.GetHistory(employees_pb2.GetHistoryRequest(employee_id=employee_id))
+    records = [_history_to_dict(r) for r in hist_resp.records]
+    return jsonify(employee=employee, records=records)
+
+
+# ── Positions API ────────────────────────────────────────────────────────────
+
+
+@app.route("/api/positions", methods=["GET"])
+def api_list_positions():
     pos_resp = stub.ListPositions(employees_pb2.ListPositionsRequest())
-    items = [_pos_to_dict(p) for p in pos_resp.positions]
-    edit_id = request.args.get("edit", type=int)
-    edit_item = None
-    if edit_id:
-        edit_resp = stub.GetPosition(employees_pb2.GetPositionRequest(id=edit_id))
-        edit_item = _pos_to_dict(edit_resp.position) if edit_resp.found else None
-    return render_template(
-        "reference.html",
-        title="Должности",
-        items=items,
-        edit_item=edit_item,
-        create_url=url_for("position_create"),
-        edit_base_url="/positions",
-        delete_base_url="/positions",
-    )
+    positions = [_pos_to_dict(p) for p in pos_resp.positions]
+    return jsonify(positions=positions)
 
 
-@app.route("/positions/create", methods=["POST"])
-def position_create():
-    name = request.form.get("name", "").strip()
+@app.route("/api/positions", methods=["POST"])
+def api_create_position():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
     error = validate_reference_name(name)
     if error:
-        flash(error, "error")
-    else:
-        result = stub.CreatePosition(employees_pb2.CreatePositionRequest(name=name))
-        if result.success:
-            flash(f"Должность «{name}» добавлена.", "success")
-        elif result.error == "duplicate_name":
-            flash(f"Должность «{name}» уже существует.", "error")
-    return redirect(url_for("positions"))
+        return jsonify(error=error), 400
+    result = stub.CreatePosition(employees_pb2.CreatePositionRequest(name=name))
+    if result.success:
+        return jsonify(success=True, message=f"Должность «{name}» добавлена."), 201
+    if result.error == "duplicate_name":
+        return jsonify(error=f"Должность «{name}» уже существует."), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/positions/<int:id>/edit", methods=["POST"])
-def position_edit(id):
-    name = request.form.get("name", "").strip()
+@app.route("/api/positions/<int:id>", methods=["PUT"])
+def api_update_position(id):
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
     error = validate_reference_name(name)
     if error:
-        flash(error, "error")
-    else:
-        result = stub.UpdatePosition(employees_pb2.UpdatePositionRequest(id=id, name=name))
-        if result.success:
-            flash(f"Должность обновлена.", "success")
-        elif result.error == "duplicate_name":
-            flash(f"Должность «{name}» уже существует.", "error")
-    return redirect(url_for("positions"))
+        return jsonify(error=error), 400
+    result = stub.UpdatePosition(employees_pb2.UpdatePositionRequest(id=id, name=name))
+    if result.success:
+        return jsonify(success=True, message="Должность обновлена.")
+    if result.error == "duplicate_name":
+        return jsonify(error=f"Должность «{name}» уже существует."), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/positions/<int:id>/delete", methods=["POST"])
-def position_delete(id):
+@app.route("/api/positions/<int:id>", methods=["DELETE"])
+def api_delete_position(id):
     result = stub.DeletePosition(employees_pb2.DeletePositionRequest(id=id))
     if result.success:
-        flash("Должность удалена.", "success")
-    elif result.error == "in_use":
-        flash("Невозможно удалить должность: она используется сотрудниками.", "error")
-    return redirect(url_for("positions"))
+        return jsonify(success=True, message="Должность удалена.")
+    if result.error == "in_use":
+        return jsonify(error="Невозможно удалить должность: она используется сотрудниками."), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/departments")
-def departments():
+# ── Departments API ──────────────────────────────────────────────────────────
+
+
+@app.route("/api/departments", methods=["GET"])
+def api_list_departments():
     dept_resp = stub.ListDepartments(employees_pb2.ListDepartmentsRequest())
-    items = [_dept_to_dict(d) for d in dept_resp.departments]
-    edit_id = request.args.get("edit", type=int)
-    edit_item = None
-    if edit_id:
-        edit_resp = stub.GetDepartment(employees_pb2.GetDepartmentRequest(id=edit_id))
-        edit_item = _dept_to_dict(edit_resp.department) if edit_resp.found else None
-    return render_template(
-        "reference.html",
-        title="Отделы",
-        items=items,
-        edit_item=edit_item,
-        create_url=url_for("department_create"),
-        edit_base_url="/departments",
-        delete_base_url="/departments",
-    )
+    departments = [_dept_to_dict(d) for d in dept_resp.departments]
+    return jsonify(departments=departments)
 
 
-@app.route("/departments/create", methods=["POST"])
-def department_create():
-    name = request.form.get("name", "").strip()
+@app.route("/api/departments", methods=["POST"])
+def api_create_department():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
     error = validate_reference_name(name)
     if error:
-        flash(error, "error")
-    else:
-        result = stub.CreateDepartment(employees_pb2.CreateDepartmentRequest(name=name))
-        if result.success:
-            flash(f"Отдел «{name}» добавлен.", "success")
-        elif result.error == "duplicate_name":
-            flash(f"Отдел «{name}» уже существует.", "error")
-    return redirect(url_for("departments"))
+        return jsonify(error=error), 400
+    result = stub.CreateDepartment(employees_pb2.CreateDepartmentRequest(name=name))
+    if result.success:
+        return jsonify(success=True, message=f"Отдел «{name}» добавлен."), 201
+    if result.error == "duplicate_name":
+        return jsonify(error=f"Отдел «{name}» уже существует."), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/departments/<int:id>/edit", methods=["POST"])
-def department_edit(id):
-    name = request.form.get("name", "").strip()
+@app.route("/api/departments/<int:id>", methods=["PUT"])
+def api_update_department(id):
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
     error = validate_reference_name(name)
     if error:
-        flash(error, "error")
-    else:
-        result = stub.UpdateDepartment(employees_pb2.UpdateDepartmentRequest(id=id, name=name))
-        if result.success:
-            flash(f"Отдел обновлён.", "success")
-        elif result.error == "duplicate_name":
-            flash(f"Отдел «{name}» уже существует.", "error")
-    return redirect(url_for("departments"))
+        return jsonify(error=error), 400
+    result = stub.UpdateDepartment(employees_pb2.UpdateDepartmentRequest(id=id, name=name))
+    if result.success:
+        return jsonify(success=True, message="Отдел обновлён.")
+    if result.error == "duplicate_name":
+        return jsonify(error=f"Отдел «{name}» уже существует."), 400
+    return jsonify(error="Unexpected error"), 500
 
 
-@app.route("/departments/<int:id>/delete", methods=["POST"])
-def department_delete(id):
+@app.route("/api/departments/<int:id>", methods=["DELETE"])
+def api_delete_department(id):
     result = stub.DeleteDepartment(employees_pb2.DeleteDepartmentRequest(id=id))
     if result.success:
-        flash("Отдел удалён.", "success")
-    elif result.error == "in_use":
-        flash("Невозможно удалить отдел: он используется сотрудниками.", "error")
-    return redirect(url_for("departments"))
+        return jsonify(success=True, message="Отдел удалён.")
+    if result.error == "in_use":
+        return jsonify(error="Невозможно удалить отдел: он используется сотрудниками."), 400
+    return jsonify(error="Unexpected error"), 500
+
+
+# ── SPA serving ──────────────────────────────────────────────────────────────
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_spa(path):
+    if path and os.path.exists(os.path.join(STATIC_DIR, path)):
+        return send_from_directory(STATIC_DIR, path)
+    return send_from_directory(STATIC_DIR, "index.html")
 
 
 if __name__ == "__main__":
