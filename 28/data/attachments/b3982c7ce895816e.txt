@@ -1,0 +1,3 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [24/Mar/2026 13:26:17] "[33mGET /positions HTTP/1.1[0m" 404 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [24/Mar/2026 13:26:49] "[33mGET /positions HTTP/1.1[0m" 404 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [24/Mar/2026 13:27:22] "[33mGET /positions HTTP/1.1[0m" 404 -

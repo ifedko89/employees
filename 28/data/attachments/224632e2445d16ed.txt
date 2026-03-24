@@ -1,0 +1,2 @@
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [24/Mar/2026 13:21:30] "[33mGET /create HTTP/1.1[0m" 404 -
+INFO     werkzeug:_internal.py:97 127.0.0.1 - - [24/Mar/2026 13:22:02] "[33mGET /create HTTP/1.1[0m" 404 -
