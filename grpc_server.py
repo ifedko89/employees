@@ -1,11 +1,58 @@
 import concurrent.futures
+import time
 
 import psycopg2
 import grpc
+from prometheus_client import Counter, Histogram, start_http_server
 
 import database
 import employees_pb2
 import employees_pb2_grpc
+
+# ── Prometheus metrics ───────────────────────────────────────────────────────
+
+GRPC_REQUEST_COUNT = Counter(
+    "grpc_server_requests_total",
+    "Total gRPC requests",
+    ["method", "status"],
+)
+GRPC_REQUEST_LATENCY = Histogram(
+    "grpc_server_request_duration_seconds",
+    "gRPC request latency in seconds",
+    ["method"],
+)
+
+
+class MetricsInterceptor(grpc.ServerInterceptor):
+    def intercept_service(self, continuation, handler_call_details):
+        method = handler_call_details.method.split("/")[-1]
+        start = time.perf_counter()
+
+        handler = continuation(handler_call_details)
+        if handler is None:
+            GRPC_REQUEST_COUNT.labels(method=method, status="UNIMPLEMENTED").inc()
+            return handler
+
+        original_unary = handler.unary_unary
+
+        def instrumented(request, context):
+            try:
+                response = original_unary(request, context)
+                elapsed = time.perf_counter() - start
+                GRPC_REQUEST_LATENCY.labels(method=method).observe(elapsed)
+                GRPC_REQUEST_COUNT.labels(method=method, status="OK").inc()
+                return response
+            except Exception as e:
+                elapsed = time.perf_counter() - start
+                GRPC_REQUEST_LATENCY.labels(method=method).observe(elapsed)
+                GRPC_REQUEST_COUNT.labels(method=method, status="ERROR").inc()
+                raise
+
+        return grpc.unary_unary_rpc_method_handler(
+            instrumented,
+            request_deserializer=handler.request_deserializer,
+            response_serializer=handler.response_serializer,
+        )
 
 
 def _row_to_employee(row) -> employees_pb2.Employee:
@@ -175,7 +222,12 @@ class EmployeesServicer(employees_pb2_grpc.EmployeesServiceServicer):
 
 def serve():
     database.init_db()
-    server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=10))
+    start_http_server(9091)
+    print("Prometheus metrics server started on port 9091")
+    server = grpc.server(
+        concurrent.futures.ThreadPoolExecutor(max_workers=10),
+        interceptors=[MetricsInterceptor()],
+    )
     employees_pb2_grpc.add_EmployeesServiceServicer_to_server(EmployeesServicer(), server)
     server.add_insecure_port("[::]:50051")
     server.start()
